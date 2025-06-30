@@ -153,7 +153,7 @@ const BrokerConnection: React.FC = () => {
     // Check if already connected
     const existingConnection = connections.find(c => c.broker_name.toLowerCase() === brokerId);
     if (existingConnection && existingConnection.is_active) {
-      toast.info('Broker is already connected');
+      toast('Broker is already connected');
       return;
     }
 
@@ -384,7 +384,7 @@ const BrokerConnection: React.FC = () => {
                     <h3 className="font-bold text-white text-lg capitalize">
                       {connection.broker_name}
                     </h3>
-                    <div className="flex items-center justify-center space-x-2 mt-2">
+                  <div className="flex items-center justify-center space-x-2 mt-2">
                       {isAuthenticated ? (
                         <>
                           <Wifi className="w-4 h-4 text-olive-400" />
@@ -402,6 +402,7 @@ const BrokerConnection: React.FC = () => {
                         </>
                       )}
                     </div>
+                    {/* Remove any potential numeric rendering of is_authenticated */}
                   </div>
 
                   {/* Authentication Required Notice */}
