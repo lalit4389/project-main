@@ -1,345 +1,206 @@
 import express from 'express';
 import { db } from '../database/init.js';
 import kiteService from '../services/kiteService.js';
+import createLogger from '../utils/logger.js';
 
 const router = express.Router();
+const logger = createLogger('WebhookHandler');
 
-// Handle TradingView webhook - Enhanced with proper broker integration
+// Helper function to log errors consistently
+async function logErrorStatus(logId, message, startTime, debugLogs) {
+  await db.runAsync(
+    'UPDATE webhook_logs SET status = ?, error_message = ?, processing_time = ? WHERE id = ?',
+    ['ERROR', message, Date.now() - startTime, logId]
+  );
+  logger.error(`Error (Log ID ${logId}): ${message}`);
+  debugLogs.push(`❌ ERROR: ${message}`);
+}
+
+// Convert webhook payload to Zerodha-compatible payload
+function formatZerodhaOrderPayload(payload, debugLogs) {
+  console.log('🔍 payload.symbol:', payload.symbol);
+  debugLogs.push(`🔍 payload.symbol: ${payload.symbol}`);
+
+  // Ensure symbol is properly converted to string
+  const symbolStr = String(payload.symbol || '').trim().toUpperCase();
+  console.log('✅ Coerced tradingsymbol:', symbolStr);
+  debugLogs.push(`✅ Coerced tradingsymbol: ${symbolStr}`);
+
+  // Validate that symbol is not empty
+  if (!symbolStr) {
+    throw new Error('Symbol cannot be empty');
+  }
+
+  const formatted = {
+    variety: 'regular',
+    exchange: payload.exchange || 'NSE',
+    tradingsymbol: symbolStr, // This should be the symbol
+    transaction_type: payload.action.toUpperCase(),
+    quantity: parseInt(payload.quantity),
+    order_type: payload.order_type || 'MARKET',
+    product: payload.product || 'MIS',
+    validity: payload.validity || 'DAY',
+    price: payload.order_type === 'LIMIT' ? parseFloat(payload.price || 0) : 0,
+    trigger_price: ['SL', 'SL-M'].includes(payload.order_type) ? parseFloat(payload.trigger_price || 0) : 0, // Fixed syntax error
+    tag: 'AutoTraderHub_TradingView'
+  };
+
+  // Add additional logging to verify the object
+  console.log('📋 Complete formatted object:', JSON.stringify(formatted, null, 2));
+  debugLogs.push(`📋 Complete formatted object: ${JSON.stringify(formatted)}`);
+  
+  // Verify tradingsymbol is still there
+  console.log('🔍 formatted.tradingsymbol:', formatted.tradingsymbol);
+  debugLogs.push(`🔍 formatted.tradingsymbol: ${formatted.tradingsymbol}`);
+
+  logger.debug('Formatted Zerodha Payload:', formatted);
+  return formatted;
+}
+
+// Handle TradingView webhook
 router.post('/:userId/:webhookId', async (req, res) => {
   const startTime = Date.now();
-  
+  const { userId, webhookId } = req.params;
+  const payload = req.body;
+  const debugLogs = [];
+
+  logger.info(`Webhook received for user ${userId}, webhook ${webhookId}`, { payload });
+  debugLogs.push(`📡 Webhook received for user ${userId}, webhook ${webhookId}`);
+
+  let logId = null;
+
   try {
-    const { userId, webhookId } = req.params;
-    const payload = req.body;
-
-    console.log(`📡 Webhook received for user ${userId}, webhook ${webhookId}:`, payload);
-
-    // Log webhook receipt
     const logResult = await db.runAsync(
       'INSERT INTO webhook_logs (user_id, payload, status) VALUES (?, ?, ?)',
       [userId, JSON.stringify(payload), 'RECEIVED']
     );
-    const logId = logResult.lastID;
+    logId = logResult.lastID;
+    logger.info(`Log inserted with ID: ${logId}`);
+    debugLogs.push(`📝 Log inserted with ID: ${logId}`);
 
-    // Update log status to processing
-    await db.runAsync(
-      'UPDATE webhook_logs SET status = ? WHERE id = ?',
-      ['PROCESSING', logId]
-    );
+    await db.runAsync('UPDATE webhook_logs SET status = ? WHERE id = ?', ['PROCESSING', logId]);
+    debugLogs.push(`🔄 Log ${logId} marked as PROCESSING.`);
 
-    // Validate payload structure
-    if (!payload.symbol || !payload.action || !payload.quantity) {
-      const errorMsg = 'Invalid payload: symbol, action, and quantity are required';
-      await db.runAsync(
-        'UPDATE webhook_logs SET status = ?, error_message = ?, processing_time = ? WHERE id = ?',
-        ['ERROR', errorMsg, Date.now() - startTime, logId]
-      );
-      return res.status(400).json({ error: errorMsg });
+    const { symbol, action, quantity } = payload;
+    if (!symbol || !action || quantity == null) {
+      await logErrorStatus(logId, 'Invalid payload: symbol, action, and quantity are required', startTime, debugLogs);
+      return res.status(400).json({ error: 'Invalid payload: symbol, action, and quantity are required', debugLogs });
     }
 
-    // Find broker connection by webhook URL
-    const brokerConnection = await db.getAsync(`
-      SELECT * FROM broker_connections 
-      WHERE user_id = ? AND webhook_url LIKE ? AND is_active = 1 
-      ORDER BY created_at DESC LIMIT 1
-    `, [userId, `%${webhookId}%`]);
+    const parsedQuantity = Number(quantity);
+    if (!Number.isInteger(parsedQuantity) || parsedQuantity <= 0) {
+      await logErrorStatus(logId, 'Invalid quantity: must be an integer > 0', startTime, debugLogs);
+      return res.status(400).json({ error: 'Invalid quantity: must be an integer > 0', debugLogs });
+    }
+
+    const transactionType = action.toUpperCase();
+    if (!['BUY', 'SELL'].includes(transactionType)) {
+      await logErrorStatus(logId, 'Invalid action: must be BUY or SELL', startTime, debugLogs);
+      return res.status(400).json({ error: 'Invalid action: must be BUY or SELL', debugLogs });
+    }
+    debugLogs.push(`✅ Payload validated: Symbol=${symbol}, Action=${transactionType}, Quantity=${parsedQuantity}`);
+
+    const brokerConnection = await db.getAsync(
+      `SELECT * FROM broker_connections WHERE user_id = ? AND webhook_url LIKE ? AND is_active = 1 ORDER BY created_at DESC LIMIT 1`,
+      [userId, `%${webhookId}%`]
+    );
 
     if (!brokerConnection) {
-      const errorMsg = 'No active broker connection found for this webhook';
-      await db.runAsync(
-        'UPDATE webhook_logs SET status = ?, error_message = ?, processing_time = ? WHERE id = ?',
-        ['ERROR', errorMsg, Date.now() - startTime, logId]
-      );
-      return res.status(404).json({ error: errorMsg });
+      await logErrorStatus(logId, 'No active broker connection found for this webhook', startTime, debugLogs);
+      return res.status(404).json({ error: 'No active broker connection found for this webhook', debugLogs });
     }
 
-    // Update log with broker connection
-    await db.runAsync(
-      'UPDATE webhook_logs SET broker_connection_id = ? WHERE id = ?',
-      [brokerConnection.id, logId]
+    await db.runAsync('UPDATE webhook_logs SET broker_connection_id = ? WHERE id = ?', [brokerConnection.id, logId]);
+    debugLogs.push(`🔗 Broker connection found: ${brokerConnection.broker_name} (ID ${brokerConnection.id})`);
+
+    const orderParams = formatZerodhaOrderPayload(payload, debugLogs);
+    
+    // Additional verification before sending to broker
+    console.log('🔍 Final orderParams before broker call:', JSON.stringify(orderParams, null, 2));
+    debugLogs.push(`🔍 Final orderParams before broker call: ${JSON.stringify(orderParams)}`);
+
+    const orderResult = await db.runAsync(
+      `INSERT INTO orders (user_id, broker_connection_id, symbol, exchange, quantity, order_type, transaction_type, product, price, trigger_price, status, webhook_data)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [userId, brokerConnection.id, orderParams.tradingsymbol, orderParams.exchange, orderParams.quantity,
+        orderParams.order_type, orderParams.transaction_type, orderParams.product, orderParams.price,
+        orderParams.trigger_price, 'PENDING', JSON.stringify(payload)]
     );
-
-    // Prepare order parameters
-    const orderParams = {
-      symbol: payload.symbol.toUpperCase(),
-      exchange: payload.exchange || 'NSE',
-      transaction_type: payload.action.toUpperCase(), // BUY or SELL
-      quantity: parseInt(payload.quantity),
-      order_type: payload.order_type || 'MARKET',
-      product: payload.product || 'MIS',
-      price: payload.price ? parseFloat(payload.price) : null,
-      trigger_price: payload.trigger_price ? parseFloat(payload.trigger_price) : null,
-      validity: payload.validity || 'DAY',
-      tag: 'AutoTraderHub_TradingView'
-    };
-
-    // Validate order parameters
-    if (orderParams.quantity <= 0) {
-      const errorMsg = 'Invalid quantity: must be greater than 0';
-      await db.runAsync(
-        'UPDATE webhook_logs SET status = ?, error_message = ?, processing_time = ? WHERE id = ?',
-        ['ERROR', errorMsg, Date.now() - startTime, logId]
-      );
-      return res.status(400).json({ error: errorMsg });
-    }
-
-    if (!['BUY', 'SELL'].includes(orderParams.transaction_type)) {
-      const errorMsg = 'Invalid action: must be BUY or SELL';
-      await db.runAsync(
-        'UPDATE webhook_logs SET status = ?, error_message = ?, processing_time = ? WHERE id = ?',
-        ['ERROR', errorMsg, Date.now() - startTime, logId]
-      );
-      return res.status(400).json({ error: errorMsg });
-    }
-
-    // Create order record in database
-    const orderResult = await db.runAsync(`
-      INSERT INTO orders (
-        user_id, broker_connection_id, symbol, exchange, quantity, 
-        order_type, transaction_type, product, price, trigger_price, 
-        status, webhook_data
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      userId,
-      brokerConnection.id,
-      orderParams.symbol,
-      orderParams.exchange,
-      orderParams.quantity,
-      orderParams.order_type,
-      orderParams.transaction_type,
-      orderParams.product,
-      orderParams.price,
-      orderParams.trigger_price,
-      'PENDING',
-      JSON.stringify(payload)
-    ]);
-
     const orderId = orderResult.lastID;
+    await db.runAsync('UPDATE webhook_logs SET order_id = ? WHERE id = ?', [orderId, logId]);
+    debugLogs.push(`📝 Order created with ID: ${orderId}`);
 
-    // Update webhook log with order ID
-    await db.runAsync(
-      'UPDATE webhook_logs SET order_id = ? WHERE id = ?',
-      [orderId, logId]
-    );
-
+    let brokerResponse;
     try {
-      // Place order with broker
-      console.log(`📈 Placing order with ${brokerConnection.broker_name}:`, orderParams);
-      
-      let brokerResponse;
+      debugLogs.push(`📤 Placing order with broker: ${brokerConnection.broker_name}`);
       if (brokerConnection.broker_name.toLowerCase() === 'zerodha') {
-        brokerResponse = await kiteService.placeOrder(brokerConnection.id, orderParams);
+        // Create a clean copy of orderParams to avoid any reference issues
+        const cleanOrderParams = { ...orderParams };
+        console.log('🔍 Clean orderParams being sent to kiteService:', JSON.stringify(cleanOrderParams, null, 2));
+        debugLogs.push(`🔍 Clean orderParams being sent to kiteService: ${JSON.stringify(cleanOrderParams)}`);
+        
+        brokerResponse = await kiteService.placeOrder(brokerConnection.id, cleanOrderParams);
       } else {
-        // Mock response for other brokers
-        brokerResponse = {
-          success: true,
-          order_id: `MOCK_${Date.now()}`,
-          data: { status: 'COMPLETE' }
-        };
+        brokerResponse = { success: true, order_id: `MOCK_${Date.now()}`, data: { status: 'COMPLETE' } };
       }
 
-      // Update order with broker response
-      await db.runAsync(`
-        UPDATE orders 
-        SET broker_order_id = ?, status = ?, status_message = ?, updated_at = CURRENT_TIMESTAMP 
-        WHERE id = ?
-      `, [
-        brokerResponse.order_id,
-        brokerResponse.data.status || 'OPEN',
-        JSON.stringify(brokerResponse.data),
-        orderId
-      ]);
+      debugLogs.push(`📥 Broker response received: ${JSON.stringify(brokerResponse)}`);
 
-      // If order is completed, update positions
+      await db.runAsync(
+        'UPDATE orders SET broker_order_id = ?, status = ?, status_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        [brokerResponse.order_id, brokerResponse.data.status || 'OPEN', JSON.stringify(brokerResponse.data), orderId]
+      );
+
       if (brokerResponse.data.status === 'COMPLETE') {
         try {
           await kiteService.syncPositions(brokerConnection.id);
+          debugLogs.push('🔄 Positions synced successfully.');
         } catch (syncError) {
-          console.error('Failed to sync positions after order completion:', syncError);
+          debugLogs.push(`⚠️ Sync positions failed: ${syncError.message}`);
         }
       }
 
-      // Update webhook log as successful
       await db.runAsync(
         'UPDATE webhook_logs SET status = ?, processing_time = ? WHERE id = ?',
         ['SUCCESS', Date.now() - startTime, logId]
       );
 
-      console.log(`✅ Order placed successfully: ${brokerResponse.order_id}`);
+      debugLogs.push(`✅ Order placed successfully. Broker Order ID: ${brokerResponse.order_id}`);
 
-      res.json({ 
+      return res.json({
         success: true,
         message: 'Order placed successfully',
-        orderId: orderId,
+        orderId,
         brokerOrderId: brokerResponse.order_id,
         status: brokerResponse.data.status,
-        processingTime: Date.now() - startTime
+        processingTime: Date.now() - startTime,
+        debugLogs
       });
 
     } catch (brokerError) {
-      console.error('Broker order placement failed:', brokerError);
-
-      // Update order status to failed
       await db.runAsync(
         'UPDATE orders SET status = ?, status_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
         ['REJECTED', brokerError.message, orderId]
       );
+      await logErrorStatus(logId, brokerError.message, startTime, debugLogs);
 
-      // Update webhook log with error
-      await db.runAsync(
-        'UPDATE webhook_logs SET status = ?, error_message = ?, processing_time = ? WHERE id = ?',
-        ['ERROR', brokerError.message, Date.now() - startTime, logId]
-      );
-
-      res.status(500).json({ 
+      return res.status(500).json({
         success: false,
         error: 'Order placement failed',
         message: brokerError.message,
-        orderId: orderId
+        orderId,
+        debugLogs
       });
     }
-
   } catch (error) {
-    console.error('Webhook processing error:', error);
-    
-    // Try to update log if we have the ID
-    try {
-      await db.runAsync(
-        'UPDATE webhook_logs SET status = ?, error_message = ?, processing_time = ? WHERE user_id = ? AND status = ?',
-        ['ERROR', error.message, Date.now() - startTime, req.params.userId, 'PROCESSING']
-      );
-    } catch (logError) {
-      console.error('Failed to update webhook log:', logError);
+    if (logId) {
+      await logErrorStatus(logId, error.message, startTime, debugLogs);
     }
-
-    res.status(500).json({ 
+    return res.status(500).json({
       success: false,
       error: 'Webhook processing failed',
-      message: error.message
-    });
-  }
-});
-
-// Get webhook logs for a user
-router.get('/logs/:userId', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const { limit = 50, offset = 0, status } = req.query;
-
-    let query = `
-      SELECT 
-        wl.*,
-        bc.broker_name,
-        o.symbol as order_symbol,
-        o.transaction_type,
-        o.quantity as order_quantity,
-        o.status as order_status
-      FROM webhook_logs wl
-      LEFT JOIN broker_connections bc ON wl.broker_connection_id = bc.id
-      LEFT JOIN orders o ON wl.order_id = o.id
-      WHERE wl.user_id = ?
-    `;
-    
-    const params = [userId];
-
-    if (status) {
-      query += ' AND wl.status = ?';
-      params.push(status.toUpperCase());
-    }
-
-    query += ' ORDER BY wl.created_at DESC LIMIT ? OFFSET ?';
-    params.push(parseInt(limit), parseInt(offset));
-
-    const logs = await db.allAsync(query, params);
-
-    // Get total count
-    let countQuery = 'SELECT COUNT(*) as total FROM webhook_logs WHERE user_id = ?';
-    let countParams = [userId];
-
-    if (status) {
-      countQuery += ' AND status = ?';
-      countParams.push(status.toUpperCase());
-    }
-
-    const { total } = await db.getAsync(countQuery, countParams);
-
-    res.json({
-      logs: logs.map(log => ({
-        ...log,
-        payload: JSON.parse(log.payload),
-        processing_time: log.processing_time || 0
-      })),
-      pagination: {
-        total,
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-        hasMore: parseInt(offset) + parseInt(limit) < total
-      }
-    });
-  } catch (error) {
-    console.error('Get webhook logs error:', error);
-    res.status(500).json({ error: 'Failed to fetch webhook logs' });
-  }
-});
-
-// Test webhook endpoint
-router.post('/test/:userId/:webhookId', async (req, res) => {
-  try {
-    const { userId, webhookId } = req.params;
-    
-    // Test payload
-    const testPayload = {
-      symbol: 'RELIANCE',
-      action: 'BUY',
-      quantity: 1,
-      order_type: 'MARKET',
-      exchange: 'NSE',
-      product: 'MIS',
-      timestamp: new Date().toISOString(),
-      test: true
-    };
-
-    console.log(`🧪 Test webhook for user ${userId}, webhook ${webhookId}`);
-
-    // Find broker connection
-    const brokerConnection = await db.getAsync(`
-      SELECT * FROM broker_connections 
-      WHERE user_id = ? AND webhook_url LIKE ? AND is_active = 1 
-      ORDER BY created_at DESC LIMIT 1
-    `, [userId, `%${webhookId}%`]);
-
-    if (!brokerConnection) {
-      return res.status(404).json({ 
-        success: false,
-        error: 'No active broker connection found for this webhook' 
-      });
-    }
-
-    res.json({
-      success: true,
-      message: 'Webhook endpoint is active and ready to receive signals',
-      brokerConnection: {
-        id: brokerConnection.id,
-        broker_name: brokerConnection.broker_name,
-        is_active: brokerConnection.is_active,
-        webhook_url: brokerConnection.webhook_url
-      },
-      testPayload,
-      instructions: {
-        url: `${req.protocol}://${req.get('host')}/api/webhook/${userId}/${webhookId}`,
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        requiredFields: ['symbol', 'action', 'quantity'],
-        optionalFields: ['order_type', 'exchange', 'product', 'price', 'trigger_price']
-      }
-    });
-  } catch (error) {
-    console.error('Test webhook error:', error);
-    res.status(500).json({ 
-      success: false,
-      error: 'Failed to test webhook endpoint' 
+      message: error.message,
+      debugLogs
     });
   }
 });
