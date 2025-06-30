@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, TrendingDown, DollarSign, Activity, Copy, CheckCircle, Bot, ExternalLink } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Activity, Copy, CheckCircle, Bot, ExternalLink, Wifi } from 'lucide-react';
 import { ordersAPI, brokerAPI } from '../../services/api';
 import toast from 'react-hot-toast';
 
@@ -28,7 +28,15 @@ const Overview: React.FC = () => {
       setPnlData(pnlResponse.data);
       setPositions(positionsResponse.data.positions);
       setRecentOrders(ordersResponse.data.orders);
-      setBrokerConnections(connectionsResponse.data.connections);
+      const connections = connectionsResponse.data.connections;
+      setBrokerConnections(connections);
+      
+      console.log('=== BROKER CONNECTIONS DEBUG ===');
+      console.log('All connections:', connections);
+      console.log('Active connections:', connections.filter(c => c.is_active));
+      console.log('Active connections with webhook:', connections.filter(c => c.is_active && c.webhook_url));
+      console.log('Has active connection with webhook:', connections.some(c => c.is_active && c.webhook_url));
+      console.log('================================');
     } catch (error) {
       toast.error('Failed to fetch dashboard data');
     } finally {
@@ -161,7 +169,7 @@ const Overview: React.FC = () => {
         ))}
       </div>
 
-      {/* Enhanced Webhook URLs Section */}
+      {/* Enhanced Broker Connections Section */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -174,73 +182,80 @@ const Overview: React.FC = () => {
         }}
       >
         <h2 className="text-xl font-bold text-white mb-4 flex items-center">
-          <Bot className="w-6 h-6 mr-2 text-olive-400" />
-          TradingView Webhook URLs
+          <Wifi className="w-6 h-6 mr-2 text-olive-400" />
+          Active Broker Connections
         </h2>
         
-        {brokerConnections.length > 0 ? (
-          <div className="space-y-4">
-            <p className="text-olive-200/70 mb-4">
-              Use these URLs in your TradingView alerts to trigger automated trades for each connected broker:
-            </p>
-            
+        {brokerConnections.some(connection => connection.is_active) ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {brokerConnections
-              .filter(connection => connection.is_active && connection.webhook_url)
-              .map((connection, index) => (
-                <motion.div
-                  key={connection.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="bg-dark-900/50 rounded-xl p-4 border border-olive-500/10"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-8 h-8 bg-gradient-to-r from-olive-600 to-olive-700 rounded-lg flex items-center justify-center">
-                        <span className="text-white text-sm font-bold">
-                          {connection.broker_name.charAt(0).toUpperCase()}
-                        </span>
+              .filter(connection => connection.is_active)
+              .map((connection, index) => {
+                const brokers = [
+                  { 
+                    id: 'zerodha', 
+                    name: 'Zerodha', 
+                    logo: '🔥', 
+                  },
+                  { 
+                    id: 'upstox', 
+                    name: 'Upstox', 
+                    logo: '⚡', 
+                  },
+                  { 
+                    id: '5paisa', 
+                    name: '5Paisa', 
+                    logo: '💎', 
+                  }
+                ];
+                const broker = brokers.find(b => b.id === connection.broker_name.toLowerCase());
+                return (
+                  <motion.div
+                    key={connection.id}
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    className="bg-dark-900/50 rounded-2xl p-4 border border-olive-500/20"
+                  >
+                    <div className="flex items-center space-x-4">
+                      <div className="text-4xl">
+                        {broker?.logo || '🏦'}
                       </div>
-                      <div>
-                        <h3 className="font-medium text-white capitalize">
-                          {connection.broker_name}
-                        </h3>
-                        <p className="text-xs text-olive-200/70">
-                          {connection.is_authenticated ? 'Authenticated' : 'Connected'}
-                        </p>
+                      <div className="flex-1">
+                        <h3 className="font-bold text-white capitalize">{connection.broker_name}</h3>
+                        {connection.webhook_url ? (
+                          <div className="flex items-center space-x-2 mt-1">
+                            <code className="text-sm text-olive-300 break-all font-mono bg-dark-800/50 p-2 rounded">
+                              {connection.webhook_url}
+                            </code>
+                            <motion.button
+                              onClick={() => copyWebhookUrl(connection.webhook_url, connection.id)}
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              className="text-olive-400 hover:text-olive-300"
+                            >
+                              {webhookCopied === connection.id ? (
+                                <CheckCircle className="w-5 h-5" />
+                              ) : (
+                                <Copy className="w-5 h-5" />
+                              )}
+                            </motion.button>
+                          </div>
+                        ) : (
+                          <p className="text-olive-400 text-sm mt-1 italic">No webhook URL available</p>
+                        )}
                       </div>
                     </div>
-                    <motion.button
-                      onClick={() => copyWebhookUrl(connection.webhook_url, connection.id)}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      className="flex items-center space-x-2 bg-olive-600 text-white px-4 py-2 rounded-lg hover:bg-olive-700 transition-colors"
-                    >
-                      {webhookCopied === connection.id ? (
-                        <>
-                          <CheckCircle className="w-4 h-4" />
-                          <span>Copied!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-4 h-4" />
-                          <span>Copy</span>
-                        </>
-                      )}
-                    </motion.button>
-                  </div>
-                  <code className="text-sm text-olive-300 break-all font-mono bg-dark-800/50 p-2 rounded block">
-                    {connection.webhook_url}
-                  </code>
-                </motion.div>
-              ))}
+                  </motion.div>
+                );
+              })}
           </div>
         ) : (
           <div className="text-center py-8">
-            <Bot className="w-16 h-16 text-olive-400/50 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-white mb-2">No Broker Connections</h3>
+            <Wifi className="w-16 h-16 text-olive-400/50 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-white mb-2">No Active Broker Connections</h3>
             <p className="text-olive-200/70 mb-4">
-              Connect a broker account to get your webhook URLs for TradingView alerts.
+              Connect a broker account to see active connections here.
             </p>
             <motion.button
               onClick={() => window.location.href = '/dashboard/brokers'}
