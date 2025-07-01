@@ -10,6 +10,26 @@ class KiteService {
     this.kiteInstances = new Map(); // Store KiteConnect instances per user
   }
 
+  // Generate access token from request token
+  async generateAccessToken(apiKey, apiSecret, requestToken) {
+    try {
+      console.log('🔑 Generating access token with:', { apiKey: apiKey.substring(0, 8) + '...', requestToken });
+      
+      const kc = new KiteConnect({
+        api_key: apiKey,
+        debug: process.env.NODE_ENV === 'development'
+      });
+
+      const response = await kc.generateSession(requestToken, apiSecret);
+      console.log('✅ Access token generated successfully');
+      
+      return response;
+    } catch (error) {
+      console.error('❌ Failed to generate access token:', error);
+      throw new Error(`Failed to generate access token: ${error.message}`);
+    }
+  }
+
   // Initialize KiteConnect instance for a user
   async initializeKite(brokerConnection) {
     try {
@@ -23,6 +43,7 @@ class KiteService {
         api_key_encrypted_length: brokerConnection.api_key ? brokerConnection.api_key.length : 0,
         access_token_encrypted_length: brokerConnection.access_token ? brokerConnection.access_token.length : 0,
         is_active: brokerConnection.is_active,
+        access_token_expires_at: brokerConnection.access_token_expires_at,
         created_at: brokerConnection.created_at,
         updated_at: brokerConnection.updated_at
       });
@@ -33,6 +54,12 @@ class KiteService {
 
       if (!brokerConnection.access_token) {
         throw new Error('Access token is missing from broker connection');
+      }
+
+      // Check if token is expired
+      const now = Math.floor(Date.now() / 1000);
+      if (brokerConnection.access_token_expires_at && brokerConnection.access_token_expires_at < now) {
+        throw new Error('Access token has expired. Please refresh your token.');
       }
 
       console.log('🔍 Encrypted API Key:', brokerConnection.api_key);
@@ -201,9 +228,7 @@ class KiteService {
     }
   }
 
-  // Rest of your methods remain the same...
-  // (I'll include a few key ones with logging)
-
+  // Get profile with enhanced error handling
   async getProfile(brokerConnectionId) {
     try {
       console.log('🔍 Getting profile for broker connection:', brokerConnectionId);
@@ -214,7 +239,67 @@ class KiteService {
     } catch (error) {
       console.error('❌ Failed to get profile:', error);
       logger.error('Failed to get profile:', error);
-      throw new Error('Failed to get profile');
+      throw new Error(`Failed to get profile: ${error.message}`);
+    }
+  }
+
+  // Get positions
+  async getPositions(brokerConnectionId) {
+    try {
+      console.log('🔍 Getting positions for broker connection:', brokerConnectionId);
+      const kc = await this.getKiteInstance(brokerConnectionId);
+      const positions = await kc.getPositions();
+      console.log('✅ Positions retrieved:', positions.net?.length || 0, 'positions');
+      return positions;
+    } catch (error) {
+      console.error('❌ Failed to get positions:', error);
+      logger.error('Failed to get positions:', error);
+      throw new Error(`Failed to get positions: ${error.message}`);
+    }
+  }
+
+  // Get holdings
+  async getHoldings(brokerConnectionId) {
+    try {
+      console.log('🔍 Getting holdings for broker connection:', brokerConnectionId);
+      const kc = await this.getKiteInstance(brokerConnectionId);
+      const holdings = await kc.getHoldings();
+      console.log('✅ Holdings retrieved:', holdings?.length || 0, 'holdings');
+      return holdings;
+    } catch (error) {
+      console.error('❌ Failed to get holdings:', error);
+      logger.error('Failed to get holdings:', error);
+      throw new Error(`Failed to get holdings: ${error.message}`);
+    }
+  }
+
+  // Get orders
+  async getOrders(brokerConnectionId) {
+    try {
+      console.log('🔍 Getting orders for broker connection:', brokerConnectionId);
+      const kc = await this.getKiteInstance(brokerConnectionId);
+      const orders = await kc.getOrders();
+      console.log('✅ Orders retrieved:', orders?.length || 0, 'orders');
+      return orders;
+    } catch (error) {
+      console.error('❌ Failed to get orders:', error);
+      logger.error('Failed to get orders:', error);
+      throw new Error(`Failed to get orders: ${error.message}`);
+    }
+  }
+
+  // Get order status
+  async getOrderStatus(brokerConnectionId, orderId) {
+    try {
+      console.log('🔍 Getting order status for:', { brokerConnectionId, orderId });
+      const kc = await this.getKiteInstance(brokerConnectionId);
+      const orderHistory = await kc.getOrderHistory(orderId);
+      console.log('✅ Order status retrieved');
+      return orderHistory[orderHistory.length - 1]; // Return latest status
+    } catch (error) {
+      console.error('❌ Failed to get order status:', error);
+      logger.error('Failed to get order status:', error);
+      throw new Error(`Failed to get order status: ${error.message}`);
     }
   }
 
@@ -240,7 +325,8 @@ class KiteService {
         success: true,
         user_name: profile.user_name,
         user_id: profile.user_id,
-        email: profile.email
+        email: profile.email,
+        broker: profile.broker
       };
     } catch (error) {
       console.log('🔍 ===== CONNECTION TEST ERROR DEBUG =====');
@@ -252,8 +338,49 @@ class KiteService {
     }
   }
 
-  // Add all other methods from your original file here...
-  // (getOrderStatus, getOrders, cancelOrder, etc.)
+  // Sync positions to database
+  async syncPositions(brokerConnectionId) {
+    try {
+      const positions = await this.getPositions(brokerConnectionId);
+      
+      if (positions && positions.net) {
+        for (const position of positions.net) {
+          if (position.quantity !== 0) {
+            await db.runAsync(`
+              INSERT OR REPLACE INTO positions 
+              (user_id, broker_connection_id, symbol, exchange, quantity, average_price, current_price, pnl, pnl_percentage, product, updated_at)
+              SELECT user_id, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP
+              FROM broker_connections WHERE id = ?
+            `, [
+              brokerConnectionId,
+              position.tradingsymbol,
+              position.exchange,
+              position.quantity,
+              position.average_price,
+              position.last_price,
+              position.pnl,
+              position.pnl ? (position.pnl / (position.average_price * Math.abs(position.quantity))) * 100 : 0,
+              position.product,
+              brokerConnectionId
+            ]);
+          }
+        }
+      }
+      
+      return positions;
+    } catch (error) {
+      console.error('❌ Failed to sync positions:', error);
+      throw error;
+    }
+  }
+
+  // Clear cached instance (useful when token is refreshed)
+  clearCachedInstance(brokerConnectionId) {
+    if (this.kiteInstances.has(brokerConnectionId)) {
+      this.kiteInstances.delete(brokerConnectionId);
+      console.log('🗑️ Cleared cached KiteConnect instance for connection:', brokerConnectionId);
+    }
+  }
 }
 
 export default new KiteService();

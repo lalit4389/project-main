@@ -57,7 +57,7 @@ export const authAPI = {
   resetPassword: ({ resetToken, newPassword }) => api.post('/auth/reset-password', { resetToken, newPassword }),
 };
 
-// Broker API with enhanced error handling
+// Enhanced Broker API with new features
 export const brokerAPI = {
   getConnections: () => api.get('/broker/connections'),
   getConnection: (id) => api.get(`/broker/connections/${id}`),
@@ -65,6 +65,7 @@ export const brokerAPI = {
     try {
       console.log('🔗 Attempting broker connection with data:', { 
         brokerName: data.brokerName, 
+        connectionName: data.connectionName,
         hasApiKey: !!data.apiKey, 
         hasApiSecret: !!data.apiSecret,
         userId: data.userId 
@@ -79,6 +80,8 @@ export const brokerAPI = {
     }
   },
   disconnect: (connectionId) => api.post('/broker/disconnect', { connectionId }),
+  deleteConnection: (connectionId) => api.delete(`/broker/connections/${connectionId}`),
+  refreshToken: (connectionId) => api.post(`/broker/refresh-token/${connectionId}`),
   completeZerodhaAuth: (connectionId, requestToken) => api.post('/broker/auth/zerodha', { connectionId, requestToken }),
   syncPositions: (connectionId) => api.post(`/broker/sync/positions/${connectionId}`),
   syncHoldings: (connectionId) => api.post(`/broker/sync/holdings/${connectionId}`),

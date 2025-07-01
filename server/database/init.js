@@ -149,26 +149,33 @@ export const initDatabase = async () => {
       )
     `);
 
-    // Enhanced Broker connections table
+    // Enhanced Broker connections table with connection_name for multiple connections
     logger.debug('Creating broker_connections table');
     await db.runAsync(`
       CREATE TABLE IF NOT EXISTS broker_connections (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
         broker_name TEXT NOT NULL,
+        connection_name TEXT, -- User-defined name for this connection
         api_key TEXT NOT NULL,
         api_secret TEXT NOT NULL,
         user_id_broker TEXT,
         access_token TEXT,
         public_token TEXT,
+        access_token_expires_at INTEGER, -- Unix timestamp for token expiry
         webhook_url TEXT,
         is_active BOOLEAN DEFAULT 1,
         last_sync DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users (id),
-        UNIQUE(user_id, broker_name)
+        FOREIGN KEY (user_id) REFERENCES users (id)
       )
+    `);
+
+    // Add index for better performance on user queries
+    await db.runAsync(`
+      CREATE INDEX IF NOT EXISTS idx_broker_connections_user_id 
+      ON broker_connections (user_id)
     `);
 
     // Orders table

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, TrendingDown, DollarSign, Activity, Copy, CheckCircle, Bot, ExternalLink, Wifi } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Activity, Copy, CheckCircle, Bot, ExternalLink, Wifi, AlertTriangle, RefreshCw, Clock } from 'lucide-react';
 import { ordersAPI, brokerAPI } from '../../services/api';
 import toast from 'react-hot-toast';
 
@@ -11,6 +11,7 @@ const Overview: React.FC = () => {
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [brokerConnections, setBrokerConnections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshingToken, setRefreshingToken] = useState<number | null>(null);
 
   useEffect(() => {
     fetchDashboardData();
@@ -49,6 +50,92 @@ const Overview: React.FC = () => {
     setWebhookCopied(connectionId);
     toast.success('Webhook URL copied!');
     setTimeout(() => setWebhookCopied(null), 2000);
+  };
+
+  const handleRefreshToken = async (connectionId: number) => {
+    setRefreshingToken(connectionId);
+    try {
+      const response = await brokerAPI.refreshToken(connectionId);
+      
+      if (response.data.loginUrl) {
+        // Open authentication window
+        const authWindow = window.open(
+          response.data.loginUrl,
+          'token-refresh',
+          'width=600,height=700,scrollbars=yes,resizable=yes'
+        );
+
+        if (authWindow) {
+          // Check if window is closed every second
+          const checkClosed = setInterval(() => {
+            if (authWindow.closed) {
+              clearInterval(checkClosed);
+              // Refresh connections to see if auth was completed
+              setTimeout(() => {
+                fetchDashboardData();
+              }, 2000);
+            }
+          }, 1000);
+
+          // Auto-close check after 5 minutes
+          setTimeout(() => {
+            if (!authWindow.closed) {
+              authWindow.close();
+              clearInterval(checkClosed);
+            }
+          }, 300000);
+        } else {
+          toast.error('Failed to open authentication window. Please check your popup blocker.');
+        }
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to refresh token');
+    } finally {
+      setRefreshingToken(null);
+    }
+  };
+
+  const getConnectionStatusInfo = (connection: any) => {
+    const now = Math.floor(Date.now() / 1000);
+    
+    if (!connection.is_authenticated) {
+      return {
+        status: 'Not Authenticated',
+        color: 'text-red-400',
+        bgColor: 'bg-red-800/20',
+        icon: AlertTriangle,
+        action: 'authenticate'
+      };
+    }
+    
+    if (connection.token_expired) {
+      return {
+        status: 'Token Expired',
+        color: 'text-red-400',
+        bgColor: 'bg-red-800/20',
+        icon: AlertTriangle,
+        action: 'refresh'
+      };
+    }
+    
+    if (connection.needs_token_refresh) {
+      const hoursLeft = Math.floor((connection.access_token_expires_at - now) / 3600);
+      return {
+        status: `Expires in ${hoursLeft}h`,
+        color: 'text-yellow-400',
+        bgColor: 'bg-yellow-800/20',
+        icon: Clock,
+        action: 'refresh'
+      };
+    }
+    
+    return {
+      status: 'Connected',
+      color: 'text-olive-400',
+      bgColor: 'bg-olive-800/20',
+      icon: CheckCircle,
+      action: null
+    };
   };
 
   const stats = [
@@ -181,10 +268,20 @@ const Overview: React.FC = () => {
           boxShadow: '0 20px 40px -12px rgba(0, 0, 0, 0.4)'
         }}
       >
-        <h2 className="text-xl font-bold text-white mb-4 flex items-center">
-          <Wifi className="w-6 h-6 mr-2 text-olive-400" />
-          Active Broker Connections
-        </h2>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-bold text-white flex items-center">
+            <Wifi className="w-6 h-6 mr-2 text-olive-400" />
+            Broker Connections ({brokerConnections.filter(c => c.is_active).length}/5)
+          </h2>
+          <motion.button
+            onClick={() => window.location.href = '/dashboard/brokers'}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="text-olive-400 hover:text-olive-300 text-sm font-medium transition-colors"
+          >
+            Manage Connections
+          </motion.button>
+        </div>
         
         {brokerConnections.some(connection => connection.is_active) ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -209,6 +306,8 @@ const Overview: React.FC = () => {
                   }
                 ];
                 const broker = brokers.find(b => b.id === connection.broker_name.toLowerCase());
+                const statusInfo = getConnectionStatusInfo(connection);
+                
                 return (
                   <motion.div
                     key={connection.id}
@@ -217,35 +316,68 @@ const Overview: React.FC = () => {
                     transition={{ delay: index * 0.1 }}
                     className="bg-dark-900/50 rounded-2xl p-4 border border-olive-500/20"
                   >
-                    <div className="flex items-center space-x-4">
-                      <div className="text-4xl">
-                        {broker?.logo || '🏦'}
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center space-x-3">
+                        <div className="text-3xl">
+                          {broker?.logo || '🏦'}
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-white capitalize">{connection.broker_name}</h3>
+                          {connection.connection_name && (
+                            <p className="text-xs text-olive-200/70">{connection.connection_name}</p>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex-1">
-                        <h3 className="font-bold text-white capitalize">{connection.broker_name}</h3>
-                        {connection.webhook_url ? (
-                          <div className="flex items-center space-x-2 mt-1">
-                            <code className="text-sm text-olive-300 break-all font-mono bg-dark-800/50 p-2 rounded">
-                              {connection.webhook_url}
-                            </code>
-                            <motion.button
-                              onClick={() => copyWebhookUrl(connection.webhook_url, connection.id)}
-                              whileHover={{ scale: 1.05 }}
-                              whileTap={{ scale: 0.95 }}
-                              className="text-olive-400 hover:text-olive-300"
-                            >
-                              {webhookCopied === connection.id ? (
-                                <CheckCircle className="w-5 h-5" />
-                              ) : (
-                                <Copy className="w-5 h-5" />
-                              )}
-                            </motion.button>
-                          </div>
-                        ) : (
-                          <p className="text-olive-400 text-sm mt-1 italic">No webhook URL available</p>
-                        )}
-                      </div>
+                      
+                      {statusInfo.action && (
+                        <motion.button
+                          onClick={() => statusInfo.action === 'refresh' ? handleRefreshToken(connection.id) : null}
+                          disabled={refreshingToken === connection.id}
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          className="text-xs bg-olive-600 text-white px-2 py-1 rounded hover:bg-olive-700 transition-colors disabled:opacity-50"
+                        >
+                          {refreshingToken === connection.id ? (
+                            <RefreshCw className="w-3 h-3 animate-spin" />
+                          ) : (
+                            statusInfo.action === 'refresh' ? 'Refresh' : 'Auth'
+                          )}
+                        </motion.button>
+                      )}
                     </div>
+
+                    {/* Connection Status */}
+                    <div className={`inline-flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-medium mb-3 ${statusInfo.bgColor} ${statusInfo.color}`}>
+                      <statusInfo.icon className="w-3 h-3" />
+                      <span>{statusInfo.status}</span>
+                    </div>
+
+                    {/* Webhook URL */}
+                    {connection.webhook_url && (
+                      <div className="mt-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs text-olive-200/70">Webhook URL:</span>
+                          <motion.button
+                            onClick={() => copyWebhookUrl(connection.webhook_url, connection.id)}
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            className="text-olive-400 hover:text-olive-300"
+                          >
+                            {webhookCopied === connection.id ? (
+                              <CheckCircle className="w-4 h-4" />
+                            ) : (
+                              <Copy className="w-4 h-4" />
+                            )}
+                          </motion.button>
+                        </div>
+                        <code className="text-xs text-olive-300 break-all block bg-dark-800/50 p-2 rounded">
+                          {connection.webhook_url.length > 50 
+                            ? `${connection.webhook_url.substring(0, 50)}...`
+                            : connection.webhook_url
+                          }
+                        </code>
+                      </div>
+                    )}
                   </motion.div>
                 );
               })}
@@ -255,7 +387,7 @@ const Overview: React.FC = () => {
             <Wifi className="w-16 h-16 text-olive-400/50 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-white mb-2">No Active Broker Connections</h3>
             <p className="text-olive-200/70 mb-4">
-              Connect a broker account to see active connections here.
+              Connect a broker account to see active connections here. You can connect up to 5 broker accounts.
             </p>
             <motion.button
               onClick={() => window.location.href = '/dashboard/brokers'}
