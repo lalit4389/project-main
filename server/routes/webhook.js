@@ -42,7 +42,7 @@ function formatZerodhaOrderPayload(payload, debugLogs) {
     validity: payload.validity || 'DAY',
     price: payload.order_type === 'LIMIT' ? parseFloat(payload.price || 0) : 0,
     trigger_price: ['SL', 'SL-M'].includes(payload.order_type) ? parseFloat(payload.trigger_price || 0) : 0, // Fixed syntax error
-    tag: 'AutoTraderHub_TradingView'
+    tag: 'AutoTraderHub'
   };
 
   // Add additional logging to verify the object
