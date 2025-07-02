@@ -4,6 +4,9 @@ import { db } from '../database/init.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { encryptData, decryptData, testEncryption } from '../utils/encryption.js';
 import kiteService from '../services/kiteService.js';
+import createLogger from '../utils/logger.js';
+
+const logger = createLogger('WebhookHandler');
 
 const router = express.Router();
 
@@ -163,18 +166,29 @@ router.post('/connect', authenticateToken, async (req, res) => {
   }
 });
 
-// Generate new access token for existing connection
+// Generate new access token for existing connectio
 router.post('/refresh-token/:connectionId', authenticateToken, async (req, res) => {
   try {
     const { connectionId } = req.params;
+    const { userId } = req.user.id;
+    logger.info('🔄 Refreshing access token for connection:', userId);
 
-    console.log('🔄 Refreshing access token for connection:', connectionId);
+    logger.info('🔄 Refreshing access token for connection:', connectionId);
 
     // Get connection details
     const connection = await db.getAsync(
-      'SELECT * FROM broker_connections WHERE id = ? AND user_id = ? AND is_active = 1',
+      'SELECT * FROM broker_connections WHERE id = ? AND user_id = ? ',
       [connectionId, req.user.id]
     );
+
+    logger.info(`✅ DB Result: ${JSON.stringify(connection, null, 2)}`);
+
+    if (!connection) {
+      console.warn('❌ No active broker connection found for this user & ID');
+    } else {
+      console.log('✅ Broker connection data:', JSON.stringify(connection, null, 2));
+    }
+
 
     if (!connection) {
       return res.status(404).json({ error: 'Broker connection not found' });
@@ -182,14 +196,17 @@ router.post('/refresh-token/:connectionId', authenticateToken, async (req, res) 
 
     if (connection.broker_name.toLowerCase() === 'zerodha') {
       try {
+        logger.info('🔎 Broker type:', connection.broker_name);
+
         const apiKey = decryptData(connection.api_key);
         const baseUrl = `${req.protocol}://${req.get('host')}`;
         const redirectUrl = `${baseUrl}/api/broker/auth/zerodha/callback?connection_id=${connectionId}&refresh=true`;
-        
+        logger.info('🔁 Generated redirect URL:', redirectUrl);
         // Generate Zerodha login URL for token refresh
         const loginUrl = `https://kite.zerodha.com/connect/login?api_key=${apiKey}&v=3&redirect_url=${encodeURIComponent(redirectUrl)}`;
+        logger.info('🔐 Final Zerodha login URL:', loginUrl);
         
-        console.log('🔐 Generated Zerodha token refresh URL for connection:', connectionId);
+        logger.info('🔐 Generated Zerodha token refresh URL for connection:', connectionId);
         
         res.json({ 
           message: 'Please complete authentication to refresh your access token.',

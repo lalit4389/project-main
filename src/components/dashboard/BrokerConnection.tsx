@@ -10,6 +10,7 @@ import {
 import { brokerAPI } from '../../services/api';
 import toast from 'react-hot-toast';
 
+
 interface BrokerConnectionForm {
   brokerName: string;
   apiKey: string;
@@ -225,35 +226,36 @@ const BrokerConnection: React.FC = () => {
     }
   };
 
-  const handleReconnect = async (connectionId: number) => {
-  try {
-    setAuthenticatingConnection(connectionId);
-    const response = await brokerAPI.refreshToken(connectionId);
-    
-    if (response.data.loginUrl) {
-      // For OAuth brokers like Zerodha
-      handleZerodhaAuth(connectionId, response.data.loginUrl);
-    } else {
-      // For non-OAuth brokers
-      toast.success('Reconnected successfully!');
-      fetchConnections(); // Refresh the connections list
+  // Consolidated reconnect function
+  const handleReconnectNow = async (connectionId: number) => {
+    try {
+      setAuthenticatingConnection(connectionId);
+      const response = await brokerAPI.refreshToken(connectionId);
+      
+      if (response.data.loginUrl) {
+        // For OAuth brokers like Zerodha
+        handleZerodhaAuth(connectionId, response.data.loginUrl);
+      } else {
+        // For non-OAuth brokers
+        toast.success('Reconnected successfully!');
+        fetchConnections(); // Refresh the connections list
+        setAuthenticatingConnection(null);
+      }
+    } catch (error: any) {
+      console.error('Reconnection failed:', error);
+      
+      // More specific error handling
+      if (error.response?.status === 404) {
+        toast.error('Connection not found. Please add the broker again.');
+        fetchConnections(); // Refresh to update UI
+      } else if (error.response?.status === 401) {
+        toast.error('Session expired. Please re-authenticate.');
+      } else {
+        toast.error(error.response?.data?.error || 'Failed to reconnect');
+      }
+      setAuthenticatingConnection(null);
     }
-  } catch (error: any) {
-    console.error('Reconnection failed:', error);
-    
-    // More specific error handling
-    if (error.response?.status === 404) {
-      toast.error('Connection not found. Please add the broker again.');
-      fetchConnections(); // Refresh to update UI
-    } else if (error.response?.status === 401) {
-      toast.error('Session expired. Please re-authenticate.');
-    } else {
-      toast.error(error.response?.data?.error || 'Failed to reconnect');
-    }
-  } finally {
-    setAuthenticatingConnection(null);
-  }
-};
+  };
 
   const disconnectBroker = async (connectionId: number) => {
     if (!confirm('Are you sure you want to disconnect this broker?')) return;
@@ -326,7 +328,7 @@ const BrokerConnection: React.FC = () => {
         color: 'text-red-600',
         bgColor: 'bg-red-100',
         icon: WifiOff,
-        action: 'reconnect'
+        needsReconnect: true
       };
     }
 
@@ -336,7 +338,7 @@ const BrokerConnection: React.FC = () => {
         color: 'text-red-600',
         bgColor: 'bg-red-100',
         icon: AlertTriangle,
-        action: 'authenticate'
+        needsReconnect: true
       };
     }
     
@@ -346,7 +348,7 @@ const BrokerConnection: React.FC = () => {
         color: 'text-red-600',
         bgColor: 'bg-red-100',
         icon: AlertTriangle,
-        action: 'reconnect'
+        needsReconnect: true
       };
     }
     
@@ -357,7 +359,7 @@ const BrokerConnection: React.FC = () => {
         color: 'text-amber-600',
         bgColor: 'bg-amber-100',
         icon: Clock,
-        action: 'reconnect'
+        needsReconnect: true
       };
     }
     
@@ -366,7 +368,7 @@ const BrokerConnection: React.FC = () => {
       color: 'text-green-600',
       bgColor: 'bg-green-100',
       icon: Wifi,
-      action: null
+      needsReconnect: false
     };
   };
 
@@ -408,7 +410,7 @@ const BrokerConnection: React.FC = () => {
       {/* Security Notice */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
+        animate={{ opacity : 1, y: 0 }}
         transition={{ delay: 0.1 }}
         whileHover={{ scale: 1.01, rotateX: 2 }}
         className="bg-white/80 backdrop-blur-xl border border-beige-200 rounded-2xl p-6 shadow-3d"
@@ -475,22 +477,19 @@ const BrokerConnection: React.FC = () => {
                   </div>
 
                   {/* Reconnect/Authentication Notice */}
-                  {(statusInfo.action === 'reconnect' || statusInfo.action === 'authenticate') && (
+                  {statusInfo.needsReconnect && (
                     <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
                       <div className="flex items-center space-x-2 mb-2">
                         <Key className="w-4 h-4 text-amber-600" />
                         <span className="text-amber-700 text-sm font-medium">
-                          {statusInfo.action === 'reconnect' ? 'Reconnection Required' : 'Authentication Required'}
+                          Reconnection Required
                         </span>
                       </div>
                       <p className="text-amber-600 text-xs mb-3">
-                        {statusInfo.action === 'reconnect' 
-                          ? 'Your access token has expired or will expire soon. Reconnect to continue trading.'
-                          : 'Complete the authentication process to enable automated trading.'
-                        }
+                        Your access token has expired or will expire soon. Reconnect to continue trading.
                       </p>
                       <motion.button
-                        onClick={() => handleReconnect(connection.id)}
+                        onClick={() => handleReconnectNow(connection.id)}
                         disabled={authenticatingConnection === connection.id}
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
@@ -537,8 +536,6 @@ const BrokerConnection: React.FC = () => {
                       </code>
                     </div>
                   )}
-
-                  
 
                   {/* Action Buttons */}
                   <div className="space-y-2">
@@ -589,29 +586,17 @@ const BrokerConnection: React.FC = () => {
                         Disconnect
                       </motion.button>
                     ) : (
-                      <div className="grid grid-cols-2 gap-2">
-                        <motion.button
-                          onClick={() => handleReconnect(connection.id)}
-                          disabled={authenticatingConnection === connection.id}
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          className="bg-amber-500 text-white py-2 rounded-lg hover:bg-amber-600 transition-colors flex items-center justify-center space-x-1 text-sm disabled:opacity-50 shadow-3d"
-                        >
-                          {authenticatingConnection === connection.id ? (
-                            <RefreshCw className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <RefreshCw className="w-4 h-4" />
-                          )}
-                          <span>Reconnect</span>
-                        </motion.button>
-
+                      <div className="space-y-2">
                         <motion.button
                           onClick={() => deleteBrokerConnection(connection.id)}
                           disabled={deletingConnection === connection.id}
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
-                          className="bg-red-500 text-white py-2 rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center space-x-1 text-sm disabled:opacity-50 shadow-3d"
+                          className="w-full bg-red-500 text-white py-2 rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center space-x-1 text-sm disabled:opacity-50 shadow-3d"
                         >
+                          
+                          
+                        
                           {deletingConnection === connection.id ? (
                             <RefreshCw className="w-4 h-4 animate-spin" />
                           ) : (
@@ -804,7 +789,7 @@ const BrokerConnection: React.FC = () => {
                   >
                     <option value="">Choose a broker...</option>
                     {brokers.map(broker => (
-                      <option key={broker.id} value={broker.id}>
+ <option key={broker.id} value={broker.id}>
                         {broker.name}
                       </option>
                     ))}
@@ -876,7 +861,7 @@ const BrokerConnection: React.FC = () => {
                         User ID
                       </label>
                       <input
-                        {...register('userId', { required: 'User ID is required' })}
+                        {...register('userId', { required: 'User  ID is required' })}
                         type="text"
                         className="w-full px-4 py-3 bg-cream-50 border border-beige-200 rounded-xl text-bronze-800 placeholder-bronze-400 focus:ring-2 focus:ring-amber-500 focus:border-transparent backdrop-blur-sm"
                         placeholder="Enter your user ID"
@@ -1021,7 +1006,7 @@ const BrokerConnection: React.FC = () => {
                     User ID
                   </label>
                   <input
-                    {...register('userId', { required: 'User ID is required' })}
+                    {...register('userId', { required: 'User  ID is required' })}
                     type="text"
                     className="w-full px-4 py-3 bg-cream-50 border border-beige-200 rounded-xl text-bronze-800 placeholder-bronze-400 focus:ring-2 focus:ring-amber-500 focus:border-transparent backdrop-blur-sm"
                     placeholder="Enter your user ID"
