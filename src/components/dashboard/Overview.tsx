@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, TrendingDown, DollarSign, Activity, Copy, CheckCircle, Bot, ExternalLink, Wifi, AlertTriangle, RefreshCw, Clock } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Activity, Copy, CheckCircle, Bot, ExternalLink, Wifi, AlertTriangle, RefreshCw, Clock, BarChart3, Target, Zap } from 'lucide-react';
 import { ordersAPI, brokerAPI } from '../../services/api';
 import toast from 'react-hot-toast';
+import { format } from 'date-fns';
 
 const Overview: React.FC = () => {
   const [webhookCopied, setWebhookCopied] = useState<number | null>(null);
@@ -101,8 +102,8 @@ const Overview: React.FC = () => {
     if (!connection.is_authenticated) {
       return {
         status: 'Not Authenticated',
-        color: 'text-red-400',
-        bgColor: 'bg-red-800/20',
+        color: 'text-red-600',
+        bgColor: 'bg-red-100',
         icon: AlertTriangle,
         action: 'authenticate'
       };
@@ -111,8 +112,8 @@ const Overview: React.FC = () => {
     if (connection.token_expired) {
       return {
         status: 'Token Expired',
-        color: 'text-red-400',
-        bgColor: 'bg-red-800/20',
+        color: 'text-red-600',
+        bgColor: 'bg-red-100',
         icon: AlertTriangle,
         action: 'refresh'
       };
@@ -122,8 +123,8 @@ const Overview: React.FC = () => {
       const hoursLeft = Math.floor((connection.access_token_expires_at - now) / 3600);
       return {
         status: `Expires in ${hoursLeft}h`,
-        color: 'text-yellow-400',
-        bgColor: 'bg-yellow-800/20',
+        color: 'text-amber-600',
+        bgColor: 'bg-amber-100',
         icon: Clock,
         action: 'refresh'
       };
@@ -131,11 +132,17 @@ const Overview: React.FC = () => {
     
     return {
       status: 'Connected',
-      color: 'text-olive-400',
-      bgColor: 'bg-olive-800/20',
+      color: 'text-green-600',
+      bgColor: 'bg-green-100',
       icon: CheckCircle,
       action: null
     };
+  };
+
+  const getPnLColor = (pnl: number) => {
+    if (pnl > 0) return 'text-green-600';
+    if (pnl < 0) return 'text-red-600';
+    return 'text-bronze-600';
   };
 
   const stats = [
@@ -145,15 +152,15 @@ const Overview: React.FC = () => {
       change: '+12.3%',
       trend: 'up',
       icon: DollarSign,
-      color: 'from-olive-500 to-olive-600'
+      color: 'from-amber-500 to-bronze-600'
     },
     {
       title: 'Win Rate',
       value: `${pnlData?.summary?.winRate || '0'}%`,
       change: '+2.1%',
       trend: 'up',
-      icon: TrendingUp,
-      color: 'from-dark-600 to-dark-700'
+      icon: Target,
+      color: 'from-green-500 to-green-600'
     },
     {
       title: 'Active Positions',
@@ -161,42 +168,41 @@ const Overview: React.FC = () => {
       change: `${positions.filter(p => p.pnl > 0).length} profitable`,
       trend: 'neutral',
       icon: Activity,
-      color: 'from-olive-600 to-olive-700'
+      color: 'from-blue-500 to-blue-600'
     },
     {
       title: 'Total Trades',
       value: pnlData?.summary?.totalTrades?.toString() || '0',
       change: 'This month',
       trend: 'up',
-      icon: Bot,
-      color: 'from-dark-500 to-olive-600'
+      icon: BarChart3,
+      color: 'from-purple-500 to-purple-600'
     }
   ];
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-olive-500"></div>
+      <div className="min-h-screen bg-gradient-to-br from-cream-50 to-beige-100 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-500"></div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
+    <div className="min-h-screen bg-gradient-to-br from-cream-50 to-beige-100 p-6 space-y-8">
       {/* Enhanced Welcome Section with 3D Effects */}
       <motion.div
         initial={{ opacity: 0, y: 20, rotateX: -10 }}
         animate={{ opacity: 1, y: 0, rotateX: 0 }}
-        className="bg-gradient-to-r from-olive-800 to-dark-800 rounded-3xl p-8 text-white relative overflow-hidden"
+        className="bg-gradient-to-r from-amber-500 to-bronze-600 rounded-3xl p-8 text-white relative overflow-hidden shadow-3d"
         style={{ 
           transformStyle: 'preserve-3d',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 40px rgba(138, 156, 112, 0.2)'
         }}
       >
-        <div className="absolute inset-0 bg-gradient-to-r from-olive-600/20 to-dark-600/20 backdrop-blur-sm"></div>
+        <div className="absolute inset-0 bg-gradient-to-r from-amber-400/20 to-bronze-500/20 backdrop-blur-sm"></div>
         <div className="relative z-10">
           <h1 className="text-3xl md:text-4xl font-bold mb-3">Welcome back, Trader!</h1>
-          <p className="text-olive-200">Your automated trading dashboard is ready. Monitor your strategies and performance.</p>
+          <p className="text-amber-100">Your automated trading dashboard is ready. Monitor your strategies and performance.</p>
         </div>
         
         {/* 3D Floating Elements */}
@@ -210,7 +216,7 @@ const Overview: React.FC = () => {
             repeat: Infinity,
             ease: "linear"
           }}
-          className="absolute top-4 right-4 w-16 h-16 bg-olive-500/20 rounded-full backdrop-blur-sm"
+          className="absolute top-4 right-4 w-16 h-16 bg-amber-400/20 rounded-full backdrop-blur-sm"
           style={{ transform: 'perspective(1000px) rotateX(45deg)' }}
         />
       </motion.div>
@@ -228,30 +234,29 @@ const Overview: React.FC = () => {
               rotateY: 5,
               rotateX: 5,
             }}
-            className="group bg-dark-800/50 backdrop-blur-xl rounded-2xl p-6 border border-olive-500/20 hover:border-olive-400/40 transition-all duration-500 shadow-xl"
+            className="group bg-white/80 backdrop-blur-xl rounded-2xl p-6 border border-beige-200 hover:border-amber-300 transition-all duration-500 shadow-3d hover:shadow-3d-hover"
             style={{ 
               transformStyle: 'preserve-3d',
-              boxShadow: '0 20px 40px -12px rgba(0, 0, 0, 0.4), 0 0 30px rgba(138, 156, 112, 0.1)'
             }}
           >
             <div className="flex items-center justify-between mb-4">
               <motion.div 
-                className={`w-14 h-14 bg-gradient-to-r ${stat.color} rounded-xl flex items-center justify-center shadow-lg group-hover:animate-pulse-glow`}
+                className={`w-14 h-14 bg-gradient-to-r ${stat.color} rounded-xl flex items-center justify-center shadow-3d group-hover:animate-bounce-3d`}
                 whileHover={{ rotateY: 180 }}
                 transition={{ duration: 0.6 }}
               >
                 <stat.icon className="w-7 h-7 text-white" />
               </motion.div>
               <div className={`text-sm font-medium px-3 py-1 rounded-full ${
-                stat.trend === 'up' ? 'text-olive-300 bg-olive-800/30' :
-                stat.trend === 'down' ? 'text-red-300 bg-red-800/30' :
-                'text-olive-200 bg-dark-700/30'
+                stat.trend === 'up' ? 'text-green-600 bg-green-100' :
+                stat.trend === 'down' ? 'text-red-600 bg-red-100' :
+                'text-bronze-600 bg-beige-100'
               }`}>
                 {stat.change}
               </div>
             </div>
-            <h3 className="text-2xl font-bold text-white mb-1 group-hover:text-olive-300 transition-colors">{stat.value}</h3>
-            <p className="text-olive-200/70">{stat.title}</p>
+            <h3 className="text-2xl font-bold text-bronze-800 mb-1 group-hover:text-amber-700 transition-colors">{stat.value}</h3>
+            <p className="text-bronze-600">{stat.title}</p>
           </motion.div>
         ))}
       </div>
@@ -262,22 +267,21 @@ const Overview: React.FC = () => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.5 }}
         whileHover={{ scale: 1.01, rotateX: 2 }}
-        className="bg-dark-800/50 backdrop-blur-xl rounded-2xl p-6 border border-olive-500/20 shadow-xl"
+        className="bg-white/80 backdrop-blur-xl rounded-2xl p-6 border border-beige-200 shadow-3d"
         style={{ 
           transformStyle: 'preserve-3d',
-          boxShadow: '0 20px 40px -12px rgba(0, 0, 0, 0.4)'
         }}
       >
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-white flex items-center">
-            <Wifi className="w-6 h-6 mr-2 text-olive-400" />
+          <h2 className="text-xl font-bold text-bronze-800 flex items-center">
+            <Wifi className="w-6 h-6 mr-2 text-amber-600" />
             Broker Connections ({brokerConnections.filter(c => c.is_active).length}/5)
           </h2>
           <motion.button
             onClick={() => window.location.href = '/dashboard/brokers'}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            className="text-olive-400 hover:text-olive-300 text-sm font-medium transition-colors"
+            className="text-amber-600 hover:text-amber-500 text-sm font-medium transition-colors"
           >
             Manage Connections
           </motion.button>
@@ -314,7 +318,9 @@ const Overview: React.FC = () => {
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.1 }}
-                    className="bg-dark-900/50 rounded-2xl p-4 border border-olive-500/20"
+                    whileHover={{ scale: 1.02, rotateY: 2 }}
+                    className="bg-cream-50 rounded-2xl p-4 border border-beige-200 shadow-3d hover:shadow-3d-hover transition-all"
+                    style={{ transformStyle: 'preserve-3d' }}
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center space-x-3">
@@ -322,9 +328,9 @@ const Overview: React.FC = () => {
                           {broker?.logo || '🏦'}
                         </div>
                         <div>
-                          <h3 className="font-bold text-white capitalize">{connection.broker_name}</h3>
+                          <h3 className="font-bold text-bronze-800 capitalize">{connection.broker_name}</h3>
                           {connection.connection_name && (
-                            <p className="text-xs text-olive-200/70">{connection.connection_name}</p>
+                            <p className="text-xs text-bronze-600">{connection.connection_name}</p>
                           )}
                         </div>
                       </div>
@@ -335,7 +341,7 @@ const Overview: React.FC = () => {
                           disabled={refreshingToken === connection.id}
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
-                          className="text-xs bg-olive-600 text-white px-2 py-1 rounded hover:bg-olive-700 transition-colors disabled:opacity-50"
+                          className="text-xs bg-amber-500 text-white px-2 py-1 rounded hover:bg-amber-600 transition-colors disabled:opacity-50 shadow-3d"
                         >
                           {refreshingToken === connection.id ? (
                             <RefreshCw className="w-3 h-3 animate-spin" />
@@ -356,12 +362,12 @@ const Overview: React.FC = () => {
                     {connection.webhook_url && (
                       <div className="mt-3">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs text-olive-200/70">Webhook URL:</span>
+                          <span className="text-xs text-bronze-600">Webhook URL:</span>
                           <motion.button
                             onClick={() => copyWebhookUrl(connection.webhook_url, connection.id)}
                             whileHover={{ scale: 1.1 }}
                             whileTap={{ scale: 0.9 }}
-                            className="text-olive-400 hover:text-olive-300"
+                            className="text-amber-600 hover:text-amber-500"
                           >
                             {webhookCopied === connection.id ? (
                               <CheckCircle className="w-4 h-4" />
@@ -370,7 +376,7 @@ const Overview: React.FC = () => {
                             )}
                           </motion.button>
                         </div>
-                        <code className="text-xs text-olive-300 break-all block bg-dark-800/50 p-2 rounded">
+                        <code className="text-xs text-bronze-700 break-all block bg-beige-50 p-2 rounded">
                           {connection.webhook_url.length > 50 
                             ? `${connection.webhook_url.substring(0, 50)}...`
                             : connection.webhook_url
@@ -384,16 +390,16 @@ const Overview: React.FC = () => {
           </div>
         ) : (
           <div className="text-center py-8">
-            <Wifi className="w-16 h-16 text-olive-400/50 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-white mb-2">No Active Broker Connections</h3>
-            <p className="text-olive-200/70 mb-4">
+            <Wifi className="w-16 h-16 text-amber-400/50 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-bronze-800 mb-2">No Active Broker Connections</h3>
+            <p className="text-bronze-600 mb-4">
               Connect a broker account to see active connections here. You can connect up to 5 broker accounts.
             </p>
             <motion.button
               onClick={() => window.location.href = '/dashboard/brokers'}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className="inline-flex items-center space-x-2 bg-gradient-to-r from-olive-600 to-olive-700 text-white px-6 py-3 rounded-xl font-medium hover:shadow-lg transition-all"
+              className="inline-flex items-center space-x-2 bg-gradient-to-r from-amber-500 to-bronze-600 text-white px-6 py-3 rounded-xl font-medium hover:shadow-3d-hover transition-all shadow-3d"
             >
               <ExternalLink className="w-4 h-4" />
               <span>Connect Broker</span>
@@ -402,23 +408,91 @@ const Overview: React.FC = () => {
         )}
       </motion.div>
 
+      {/* Enhanced Positions Section */}
+      {positions.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+          whileHover={{ scale: 1.005 }}
+          className="bg-white/80 backdrop-blur-xl rounded-2xl p-6 border border-beige-200 shadow-3d"
+          style={{ 
+            transformStyle: 'preserve-3d',
+          }}
+        >
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-bronze-800 flex items-center">
+              <Activity className="w-6 h-6 mr-2 text-amber-600" />
+              Active Positions
+            </h2>
+            <button 
+              onClick={() => window.location.href = '/dashboard/orders'}
+              className="text-amber-600 hover:text-amber-500 font-medium transition-colors"
+            >
+              View All
+            </button>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {positions.slice(0, 6).map((position, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.1 }}
+                whileHover={{ scale: 1.02 }}
+                className="bg-cream-50 rounded-xl p-4 border border-beige-200 shadow-3d hover:shadow-3d-hover transition-all"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-bold text-bronze-800">{position.symbol}</h4>
+                  <span className={`text-sm font-medium ${
+                    position.quantity > 0 ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {position.quantity > 0 ? 'LONG' : 'SHORT'}
+                  </span>
+                </div>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-bronze-600">Qty:</span>
+                    <span className="text-bronze-800 font-medium">{Math.abs(position.quantity)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-bronze-600">Avg Price:</span>
+                    <span className="text-bronze-800 font-medium">₹{position.average_price}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-bronze-600">Current:</span>
+                    <span className="text-bronze-800 font-medium">₹{position.current_price}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-bronze-600">P&L:</span>
+                    <span className={`font-bold ${getPnLColor(position.pnl)}`}>
+                      {position.pnl > 0 ? '+' : ''}₹{position.pnl}
+                    </span>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
       {/* Enhanced Recent Trades Table */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.6 }}
+        transition={{ delay: 0.7 }}
         whileHover={{ scale: 1.005 }}
-        className="bg-dark-800/50 backdrop-blur-xl rounded-2xl p-6 border border-olive-500/20 shadow-xl"
+        className="bg-white/80 backdrop-blur-xl rounded-2xl p-6 border border-beige-200 shadow-3d"
         style={{ 
           transformStyle: 'preserve-3d',
-          boxShadow: '0 20px 40px -12px rgba(0, 0, 0, 0.4)'
         }}
       >
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-white">Recent Trades</h2>
+          <h2 className="text-xl font-bold text-bronze-800">Recent Trades</h2>
           <button 
             onClick={() => window.location.href = '/dashboard/orders'}
-            className="text-olive-400 hover:text-olive-300 font-medium transition-colors"
+            className="text-amber-600 hover:text-amber-500 font-medium transition-colors"
           >
             View All
           </button>
@@ -428,13 +502,14 @@ const Overview: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-olive-500/20">
-                  <th className="text-left py-3 px-4 font-semibold text-olive-200">Symbol</th>
-                  <th className="text-left py-3 px-4 font-semibold text-olive-200">Type</th>
-                  <th className="text-left py-3 px-4 font-semibold text-olive-200">Qty</th>
-                  <th className="text-left py-3 px-4 font-semibold text-olive-200">Price</th>
-                  <th className="text-left py-3 px-4 font-semibold text-olive-200">P&L</th>
-                  <th className="text-left py-3 px-4 font-semibold text-olive-200">Status</th>
+                <tr className="border-b border-beige-200">
+                  <th className="text-left py-3 px-4 font-semibold text-bronze-700">Symbol</th>
+                  <th className="text-left py-3 px-4 font-semibold text-bronze-700">Type</th>
+                  <th className="text-left py-3 px-4 font-semibold text-bronze-700">Qty</th>
+                  <th className="text-left py-3 px-4 font-semibold text-bronze-700">Price</th>
+                  <th className="text-left py-3 px-4 font-semibold text-bronze-700">P&L</th>
+                  <th className="text-left py-3 px-4 font-semibold text-bronze-700">Status</th>
+                  <th className="text-left py-3 px-4 font-semibold text-bronze-700">Time</th>
                 </tr>
               </thead>
               <tbody>
@@ -444,33 +519,34 @@ const Overview: React.FC = () => {
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.1 }}
-                    className="border-b border-olive-500/10 hover:bg-olive-800/10 transition-colors"
+                    className="border-b border-beige-100 hover:bg-beige-50 transition-colors"
                   >
-                    <td className="py-3 px-4 font-medium text-white">{order.symbol}</td>
+                    <td className="py-3 px-4 font-medium text-bronze-800">{order.symbol}</td>
                     <td className="py-3 px-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        order.transaction_type === 'BUY' ? 'bg-olive-800/30 text-olive-300' : 'bg-red-800/30 text-red-300'
+                        order.transaction_type === 'BUY' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                       }`}>
                         {order.transaction_type}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-olive-200">{order.quantity}</td>
-                    <td className="py-3 px-4 text-olive-200">₹{order.executed_price || order.price}</td>
+                    <td className="py-3 px-4 text-bronze-700">{order.quantity}</td>
+                    <td className="py-3 px-4 text-bronze-700">₹{order.executed_price || order.price}</td>
                     <td className="py-3 px-4">
-                      <span className={`font-medium ${
-                        order.pnl > 0 ? 'text-olive-400' : order.pnl < 0 ? 'text-red-400' : 'text-olive-200'
-                      }`}>
+                      <span className={`font-medium ${getPnLColor(order.pnl)}`}>
                         {order.pnl > 0 ? '+' : ''}₹{order.pnl}
                       </span>
                     </td>
                     <td className="py-3 px-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        order.status === 'COMPLETE' ? 'bg-olive-800/30 text-olive-300' :
-                        order.status === 'OPEN' ? 'bg-yellow-800/30 text-yellow-300' :
-                        'bg-dark-700/30 text-olive-200'
+                        order.status === 'COMPLETE' ? 'bg-green-100 text-green-700' :
+                        order.status === 'OPEN' ? 'bg-amber-100 text-amber-700' :
+                        'bg-beige-100 text-bronze-700'
                       }`}>
                         {order.status}
                       </span>
+                    </td>
+                    <td className="py-3 px-4 text-bronze-600 text-sm">
+                      {format(new Date(order.created_at), 'MMM dd, HH:mm')}
                     </td>
                   </motion.tr>
                 ))}
@@ -479,9 +555,9 @@ const Overview: React.FC = () => {
           </div>
         ) : (
           <div className="text-center py-8">
-            <TrendingUp className="w-16 h-16 text-olive-400/50 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-white mb-2">No Recent Trades</h3>
-            <p className="text-olive-200/70">
+            <TrendingUp className="w-16 h-16 text-amber-400/50 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-bronze-800 mb-2">No Recent Trades</h3>
+            <p className="text-bronze-600">
               Your recent trading activity will appear here once you start placing orders.
             </p>
           </div>

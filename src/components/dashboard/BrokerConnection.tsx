@@ -47,6 +47,7 @@ const BrokerConnection: React.FC = () => {
   const [authenticatingConnection, setAuthenticatingConnection] = useState<number | null>(null);
   const [editingConnection, setEditingConnection] = useState<BrokerConnection | null>(null);
   const [showEditForm, setShowEditForm] = useState(false);
+  const [deletingConnection, setDeletingConnection] = useState<number | null>(null);
   
   const { register, handleSubmit, watch, reset, setValue, formState: { errors } } = useForm<BrokerConnectionForm>();
   const selectedBroker = watch('brokerName');
@@ -156,19 +157,13 @@ const BrokerConnection: React.FC = () => {
   };
 
   const handleConnectClick = (brokerId: string) => {
-    // Check if already connected
-    const existingConnection = connections.find(c => c.broker_name.toLowerCase() === brokerId);
-    if (existingConnection && existingConnection.is_active) {
-      toast('Broker is already connected');
-      return;
-    }
-
-    // Set the selected broker and show form
+    // Allow multiple connections to the same broker
     setSelectedBrokerForConnection(brokerId);
     setValue('brokerName', brokerId);
     setValue('apiKey', '');
     setValue('apiSecret', '');
     setValue('userId', '');
+    setValue('connectionName', '');
     setShowConnectionForm(true);
   };
 
@@ -183,6 +178,7 @@ const BrokerConnection: React.FC = () => {
       setValue('apiKey', ''); // Don't pre-fill for security
       setValue('apiSecret', ''); // Don't pre-fill for security
       setValue('userId', connectionDetails.user_id_broker || '');
+      setValue('connectionName', connection.connection_name || '');
       setShowEditForm(true);
     } catch (error: any) {
       console.error('Failed to fetch connection details:', error);
@@ -228,27 +224,17 @@ const BrokerConnection: React.FC = () => {
     }
   };
 
-  const initiateZerodhaAuth = async (connectionId: number) => {
+  const handleReconnect = async (connectionId: number) => {
     try {
       setAuthenticatingConnection(connectionId);
+      const response = await brokerAPI.refreshToken(connectionId);
       
-      // Get the connection details to generate auth URL
-      const connection = connections.find(c => c.id === connectionId);
-      if (!connection) {
-        throw new Error('Connection not found');
+      if (response.data.loginUrl) {
+        handleZerodhaAuth(connectionId, response.data.loginUrl);
       }
-
-      // For now, we'll use a mock auth URL. In production, you'd get this from your backend
-      const baseUrl = window.location.origin;
-      const redirectUrl = `${baseUrl}/api/broker/auth/zerodha/callback?connection_id=${connectionId}`;
-      
-      // This should come from your backend API that generates the proper Zerodha login URL
-      const loginUrl = `https://kite.zerodha.com/connect/login?api_key=YOUR_API_KEY&v=3&redirect_url=${encodeURIComponent(redirectUrl)}`;
-      
-      handleZerodhaAuth(connectionId, loginUrl);
     } catch (error: any) {
-      console.error('Failed to initiate Zerodha auth:', error);
-      toast.error('Failed to start authentication process');
+      console.error('Failed to initiate reconnection:', error);
+      toast.error('Failed to start reconnection process');
       setAuthenticatingConnection(null);
     }
   };
@@ -264,6 +250,23 @@ const BrokerConnection: React.FC = () => {
       fetchConnections();
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Failed to disconnect broker');
+    }
+  };
+
+  const deleteBrokerConnection = async (connectionId: number) => {
+    if (!confirm('Are you sure you want to permanently delete this broker connection? This action cannot be undone.')) {
+      return;
+    }
+
+    setDeletingConnection(connectionId);
+    try {
+      await brokerAPI.deleteConnection(connectionId);
+      toast.success('Broker connection deleted successfully!');
+      fetchConnections();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to delete broker connection');
+    } finally {
+      setDeletingConnection(null);
     }
   };
 
@@ -298,16 +301,59 @@ const BrokerConnection: React.FC = () => {
     }
   };
 
+  const getConnectionStatusInfo = (connection: any) => {
+    const now = Math.floor(Date.now() / 1000);
+    
+    if (!connection.is_authenticated) {
+      return {
+        status: 'Not Authenticated',
+        color: 'text-red-600',
+        bgColor: 'bg-red-100',
+        icon: AlertTriangle,
+        action: 'authenticate'
+      };
+    }
+    
+    if (connection.token_expired) {
+      return {
+        status: 'Token Expired',
+        color: 'text-red-600',
+        bgColor: 'bg-red-100',
+        icon: AlertTriangle,
+        action: 'reconnect'
+      };
+    }
+    
+    if (connection.needs_token_refresh) {
+      const hoursLeft = Math.floor((connection.access_token_expires_at - now) / 3600);
+      return {
+        status: `Expires in ${hoursLeft}h`,
+        color: 'text-amber-600',
+        bgColor: 'bg-amber-100',
+        icon: Clock,
+        action: 'reconnect'
+      };
+    }
+    
+    return {
+      status: 'Connected',
+      color: 'text-green-600',
+      bgColor: 'bg-green-100',
+      icon: CheckCircle,
+      action: null
+    };
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-olive-500"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-500"></div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
+    <div className="min-h-screen bg-gradient-to-br from-cream-50 to-beige-100 p-6 space-y-8">
       {/* Enhanced Header with 3D Effects */}
       <motion.div
         initial={{ opacity: 0, y: 20, rotateX: -10 }}
@@ -315,14 +361,15 @@ const BrokerConnection: React.FC = () => {
         className="flex flex-col sm:flex-row sm:items-center sm:justify-between"
       >
         <div>
-          <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">Broker Connections</h1>
-          <p className="text-olive-200/70">Connect your broker accounts to enable automated trading</p>
+          <h1 className="text-3xl md:text-4xl font-bold text-bronze-800 mb-2">Broker Connections</h1>
+          <p className="text-bronze-600">Connect your broker accounts to enable automated trading</p>
         </div>
         <motion.button
           onClick={() => setShowConnectionForm(true)}
-          whileHover={{ scale: 1.05 }}
+          whileHover={{ scale: 1.05, rotateX: 5 }}
           whileTap={{ scale: 0.95 }}
-          className="mt-4 sm:mt-0 bg-gradient-to-r from-olive-600 to-olive-700 text-white px-6 py-3 rounded-xl font-medium flex items-center space-x-2 hover:shadow-lg transition-all"
+          className="mt-4 sm:mt-0 bg-gradient-to-r from-amber-500 to-bronze-600 text-white px-6 py-3 rounded-xl font-medium flex items-center space-x-2 hover:shadow-3d-hover transition-all shadow-3d"
+          style={{ transformStyle: 'preserve-3d' }}
         >
           <Plus className="w-5 h-5" />
           <span>Add Broker</span>
@@ -335,10 +382,9 @@ const BrokerConnection: React.FC = () => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
         whileHover={{ scale: 1.01, rotateX: 2 }}
-        className="bg-olive-800/20 backdrop-blur-xl border border-olive-500/30 rounded-2xl p-6 shadow-xl"
+        className="bg-white/80 backdrop-blur-xl border border-beige-200 rounded-2xl p-6 shadow-3d"
         style={{ 
           transformStyle: 'preserve-3d',
-          boxShadow: '0 20px 40px -12px rgba(138, 156, 112, 0.2)'
         }}
       >
         <div className="flex items-start space-x-4">
@@ -346,11 +392,11 @@ const BrokerConnection: React.FC = () => {
             animate={{ rotateY: [0, 360] }}
             transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
           >
-            <Shield className="w-8 h-8 text-olive-400 flex-shrink-0 mt-1" />
+            <Shield className="w-8 h-8 text-amber-600 flex-shrink-0 mt-1" />
           </motion.div>
           <div>
-            <h3 className="font-bold text-olive-300 mb-2 text-lg">Your Security is Our Priority</h3>
-            <p className="text-olive-200/80">
+            <h3 className="font-bold text-bronze-800 mb-2 text-lg">Your Security is Our Priority</h3>
+            <p className="text-bronze-600">
               All API keys are encrypted using AES-256 encryption and stored securely. 
               We never store your login credentials and only use read-only permissions where possible.
             </p>
@@ -364,18 +410,17 @@ const BrokerConnection: React.FC = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="bg-dark-800/50 backdrop-blur-xl rounded-2xl p-6 border border-olive-500/20 shadow-xl"
+          className="bg-white/80 backdrop-blur-xl rounded-2xl p-6 border border-beige-200 shadow-3d"
         >
-          <h2 className="text-2xl font-bold text-white mb-6 flex items-center">
-            <Wifi className="w-6 h-6 mr-2 text-olive-400" />
-            Connected Brokers
+          <h2 className="text-2xl font-bold text-bronze-800 mb-6 flex items-center">
+            <Wifi className="w-6 h-6 mr-2 text-amber-600" />
+            Connected Brokers ({connections.filter(c => c.is_active).length})
           </h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {connections.map((connection, index) => {
               const broker = brokers.find(b => b.id === connection.broker_name.toLowerCase());
-              const isAuthenticated = connection.is_authenticated;
-              const needsAuth = broker?.authRequired && !isAuthenticated;
+              const statusInfo = getConnectionStatusInfo(connection);
               
               return (
                 <motion.div
@@ -383,60 +428,57 @@ const BrokerConnection: React.FC = () => {
                   initial={{ opacity: 0, y: 30 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.6, delay: index * 0.1 }}
-                  className="bg-dark-900/50 rounded-2xl p-6 border border-olive-500/20"
+                  whileHover={{ scale: 1.02, rotateY: 2 }}
+                  className="bg-cream-50 rounded-2xl p-6 border border-beige-200 shadow-3d hover:shadow-3d-hover transition-all"
+                  style={{ transformStyle: 'preserve-3d' }}
                 >
                   <div className="text-center mb-4">
                     <div className="text-4xl mb-3">{broker?.logo || '🏦'}</div>
-                    <h3 className="font-bold text-white text-lg capitalize">
+                    <h3 className="font-bold text-bronze-800 text-lg capitalize">
                       {connection.broker_name}
                     </h3>
-                  <div className="flex items-center justify-center space-x-2 mt-2">
-                      {isAuthenticated ? (
-                        <>
-                          <Wifi className="w-4 h-4 text-olive-400" />
-                          <span className="text-olive-300 text-sm">Connected & Authenticated</span>
-                        </>
-                      ) : needsAuth ? (
-                        <>
-                          <AlertCircle className="w-4 h-4 text-yellow-400" />
-                          <span className="text-yellow-300 text-sm">Authentication Required</span>
-                        </>
-                      ) : (
-                        <>
-                          <Wifi className="w-4 h-4 text-olive-400" />
-                          <span className="text-olive-300 text-sm">Connected</span>
-                        </>
-                      )}
+                    {connection.connection_name && (
+                      <p className="text-sm text-bronze-600 mt-1">{connection.connection_name}</p>
+                    )}
+                    <div className="flex items-center justify-center space-x-2 mt-2">
+                      <div className={`inline-flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-medium ${statusInfo.bgColor} ${statusInfo.color}`}>
+                        <statusInfo.icon className="w-3 h-3" />
+                        <span>{statusInfo.status}</span>
+                      </div>
                     </div>
-                    {/* Remove any potential numeric rendering of is_authenticated */}
                   </div>
 
-                  {/* Authentication Required Notice */}
-                  {needsAuth && (
-                    <div className="bg-yellow-800/20 border border-yellow-500/30 rounded-lg p-3 mb-4">
+                  {/* Reconnect Button for expired tokens */}
+                  {(statusInfo.action === 'reconnect' || statusInfo.action === 'authenticate') && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
                       <div className="flex items-center space-x-2 mb-2">
-                        <Key className="w-4 h-4 text-yellow-400" />
-                        <span className="text-yellow-300 text-sm font-medium">Authentication Required</span>
+                        <Key className="w-4 h-4 text-amber-600" />
+                        <span className="text-amber-700 text-sm font-medium">
+                          {statusInfo.action === 'reconnect' ? 'Reconnection Required' : 'Authentication Required'}
+                        </span>
                       </div>
-                      <p className="text-yellow-200/70 text-xs mb-3">
-                        Complete the authentication process to enable automated trading.
+                      <p className="text-amber-600 text-xs mb-3">
+                        {statusInfo.action === 'reconnect' 
+                          ? 'Your access token has expired or will expire soon. Reconnect to continue trading.'
+                          : 'Complete the authentication process to enable automated trading.'
+                        }
                       </p>
                       <motion.button
-                        onClick={() => initiateZerodhaAuth(connection.id)}
+                        onClick={() => handleReconnect(connection.id)}
                         disabled={authenticatingConnection === connection.id}
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
-                        className="w-full bg-gradient-to-r from-yellow-600 to-yellow-700 text-white py-2 px-3 rounded-lg hover:from-yellow-700 hover:to-yellow-800 transition-all flex items-center justify-center space-x-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full bg-gradient-to-r from-amber-500 to-amber-600 text-white py-2 px-3 rounded-lg hover:shadow-3d transition-all flex items-center justify-center space-x-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {authenticatingConnection === connection.id ? (
                           <>
                             <RefreshCw className="w-4 h-4 animate-spin" />
-                            <span>Authenticating...</span>
+                            <span>Reconnecting...</span>
                           </>
                         ) : (
                           <>
                             <ExternalLink className="w-4 h-4" />
-                            <span>Authenticate Now</span>
+                            <span>Reconnect Now</span>
                           </>
                         )}
                       </motion.button>
@@ -445,14 +487,14 @@ const BrokerConnection: React.FC = () => {
 
                   {/* Webhook URL */}
                   {connection.webhook_url && (
-                    <div className="bg-dark-800/50 rounded-lg p-3 mb-4">
+                    <div className="bg-beige-50 rounded-lg p-3 mb-4">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-olive-200/70">Webhook URL:</span>
+                        <span className="text-xs text-bronze-600">Webhook URL:</span>
                         <motion.button
                           onClick={() => copyWebhookUrl(connection.webhook_url, connection.id)}
                           whileHover={{ scale: 1.1 }}
                           whileTap={{ scale: 0.9 }}
-                          className="text-olive-400 hover:text-olive-300"
+                          className="text-amber-600 hover:text-amber-500"
                         >
                           {copiedWebhook === connection.id ? (
                             <CheckCircle className="w-4 h-4" />
@@ -461,7 +503,7 @@ const BrokerConnection: React.FC = () => {
                           )}
                         </motion.button>
                       </div>
-                      <code className="text-xs text-olive-300 break-all block">
+                      <code className="text-xs text-bronze-700 break-all block">
                         {connection.webhook_url.length > 60 
                           ? `${connection.webhook_url.substring(0, 60)}...`
                           : connection.webhook_url
@@ -472,14 +514,14 @@ const BrokerConnection: React.FC = () => {
 
                   {/* Action Buttons */}
                   <div className="space-y-2">
-                    {isAuthenticated && (
+                    {connection.is_authenticated && (
                       <div className="grid grid-cols-2 gap-2">
                         <motion.button 
                           onClick={() => syncPositions(connection.id)}
                           disabled={syncingConnection === connection.id}
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
-                          className="bg-olive-600 text-white py-2 px-3 rounded-lg hover:bg-olive-700 transition-colors flex items-center justify-center space-x-1 text-sm disabled:opacity-50"
+                          className="bg-amber-500 text-white py-2 px-3 rounded-lg hover:bg-amber-600 transition-colors flex items-center justify-center space-x-1 text-sm disabled:opacity-50 shadow-3d"
                         >
                           <RefreshCw className={`w-3 h-3 ${syncingConnection === connection.id ? 'animate-spin' : ''}`} />
                           <span>Sync</span>
@@ -490,7 +532,7 @@ const BrokerConnection: React.FC = () => {
                           disabled={testingConnection === connection.id}
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
-                          className="bg-blue-600 text-white py-2 px-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-1 text-sm disabled:opacity-50"
+                          className="bg-blue-500 text-white py-2 px-3 rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center space-x-1 text-sm disabled:opacity-50 shadow-3d"
                         >
                           <TestTube className={`w-3 h-3 ${testingConnection === connection.id ? 'animate-pulse' : ''}`} />
                           <span>Test</span>
@@ -502,20 +544,42 @@ const BrokerConnection: React.FC = () => {
                       onClick={() => handleEditConnection(connection)}
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
-                      className="w-full bg-olive-600 text-white py-2 rounded-lg hover:bg-olive-700 transition-colors flex items-center justify-center space-x-2 text-sm"
+                      className="w-full bg-bronze-500 text-white py-2 rounded-lg hover:bg-bronze-600 transition-colors flex items-center justify-center space-x-2 text-sm shadow-3d"
                     >
                       <Edit3 className="w-4 h-4" />
                       <span>Edit Settings</span>
                     </motion.button>
                     
-                    <motion.button
-                      onClick={() => disconnectBroker(connection.id)}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      className="w-full bg-red-800/30 text-red-300 py-2 rounded-lg hover:bg-red-700/40 transition-colors text-sm"
-                    >
-                      Disconnect
-                    </motion.button>
+                    {connection.is_active ? (
+                      <motion.button
+                        onClick={() => disconnectBroker(connection.id)}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className="w-full bg-red-100 text-red-600 py-2 rounded-lg hover:bg-red-200 transition-colors text-sm border border-red-200"
+                      >
+                        Disconnect
+                      </motion.button>
+                    ) : (
+                      <motion.button
+                        onClick={() => deleteBrokerConnection(connection.id)}
+                        disabled={deletingConnection === connection.id}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className="w-full bg-red-500 text-white py-2 rounded-lg hover:bg-red-600 transition-colors text-sm flex items-center justify-center space-x-2 disabled:opacity-50 shadow-3d"
+                      >
+                        {deletingConnection === connection.id ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            <span>Deleting...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 className="w-4 h-4" />
+                            <span>Delete</span>
+                          </>
+                        )}
+                      </motion.button>
+                    )}
                   </div>
                 </motion.div>
               );
@@ -530,21 +594,19 @@ const BrokerConnection: React.FC = () => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
         whileHover={{ scale: 1.005 }}
-        className="bg-dark-800/50 backdrop-blur-xl rounded-2xl p-6 border border-olive-500/20 shadow-xl"
+        className="bg-white/80 backdrop-blur-xl rounded-2xl p-6 border border-beige-200 shadow-3d"
         style={{ 
           transformStyle: 'preserve-3d',
-          boxShadow: '0 20px 40px -12px rgba(0, 0, 0, 0.4)'
         }}
       >
-        <h2 className="text-2xl font-bold text-white mb-6 flex items-center">
-          <Zap className="w-6 h-6 mr-2 text-olive-400" />
+        <h2 className="text-2xl font-bold text-bronze-800 mb-6 flex items-center">
+          <Zap className="w-6 h-6 mr-2 text-amber-600" />
           Available Brokers
         </h2>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {brokers.map((broker, index) => {
-            const connection = connections.find(c => c.broker_name.toLowerCase() === broker.id);
-            const isConnected = connection?.is_active;
+            const activeConnections = connections.filter(c => c.broker_name.toLowerCase() === broker.id && c.is_active);
             
             return (
               <motion.div
@@ -557,16 +619,9 @@ const BrokerConnection: React.FC = () => {
                   rotateY: 5,
                   rotateX: 5,
                 }}
-                className={`group p-6 rounded-2xl border-2 transition-all duration-500 ${
-                  isConnected
-                    ? 'border-olive-500/40 bg-olive-800/20'
-                    : 'border-olive-500/20 bg-dark-800/30'
-                } backdrop-blur-xl shadow-xl`}
+                className="group p-6 rounded-2xl border-2 border-beige-200 bg-cream-50 hover:border-amber-300 transition-all duration-500 shadow-3d hover:shadow-3d-hover"
                 style={{ 
                   transformStyle: 'preserve-3d',
-                  boxShadow: isConnected 
-                    ? '0 20px 40px -12px rgba(138, 156, 112, 0.3)' 
-                    : '0 20px 40px -12px rgba(0, 0, 0, 0.3)'
                 }}
               >
                 <div className="text-center">
@@ -577,37 +632,41 @@ const BrokerConnection: React.FC = () => {
                   >
                     {broker.logo}
                   </motion.div>
-                  <h3 className="font-bold text-white mb-2 text-xl group-hover:text-olive-300 transition-colors">
+                  <h3 className="font-bold text-bronze-800 mb-2 text-xl group-hover:text-amber-700 transition-colors">
                     {broker.name}
                   </h3>
-                  <p className="text-olive-200/70 mb-6">
+                  <p className="text-bronze-600 mb-6">
                     {broker.description}
                   </p>
                   
                   <div className="space-y-3 mb-6">
                     {broker.features.map((feature, featureIndex) => (
                       <div key={featureIndex} className="flex items-center space-x-3">
-                        <CheckCircle className="w-4 h-4 text-olive-400 flex-shrink-0" />
-                        <span className="text-olive-200 text-sm">{feature}</span>
+                        <CheckCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                        <span className="text-bronze-700 text-sm">{feature}</span>
                       </div>
                     ))}
                   </div>
-                  
-                  {isConnected ? (
-                    <div className="flex items-center justify-center space-x-2 text-olive-300">
-                      <CheckCircle className="w-5 h-5" />
-                      <span className="font-medium">Connected</span>
+
+                  {activeConnections.length > 0 && (
+                    <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="flex items-center justify-center space-x-2 text-green-700">
+                        <CheckCircle className="w-4 h-4" />
+                        <span className="text-sm font-medium">
+                          {activeConnections.length} Active Connection{activeConnections.length > 1 ? 's' : ''}
+                        </span>
+                      </div>
                     </div>
-                  ) : (
-                    <motion.button 
-                      onClick={() => handleConnectClick(broker.id)}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      className="w-full bg-gradient-to-r from-olive-600 to-olive-700 text-white py-3 rounded-xl hover:shadow-lg transition-all font-medium"
-                    >
-                      Connect {broker.name}
-                    </motion.button>
                   )}
+                  
+                  <motion.button 
+                    onClick={() => handleConnectClick(broker.id)}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className="w-full bg-gradient-to-r from-amber-500 to-bronze-600 text-white py-3 rounded-xl hover:shadow-3d-hover transition-all font-medium shadow-3d"
+                  >
+                    Connect {broker.name}
+                  </motion.button>
                 </div>
               </motion.div>
             );
@@ -628,10 +687,10 @@ const BrokerConnection: React.FC = () => {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-dark-800 rounded-2xl p-6 max-w-md w-full border border-olive-500/20"
+              className="bg-white rounded-2xl p-6 max-w-md w-full border border-beige-200 shadow-3d"
             >
-              <h3 className="text-xl font-bold text-white mb-4">Complete Zerodha Authentication</h3>
-              <p className="text-olive-200/70 mb-6">
+              <h3 className="text-xl font-bold text-bronze-800 mb-4">Complete Zerodha Authentication</h3>
+              <p className="text-bronze-600 mb-6">
                 Click the button below to open Zerodha login page. After logging in and authorizing the app, 
                 the authentication will be completed automatically.
               </p>
@@ -641,7 +700,7 @@ const BrokerConnection: React.FC = () => {
                   onClick={() => handleZerodhaAuth(authenticationStep.connectionId, authenticationStep.loginUrl)}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  className="w-full bg-gradient-to-r from-olive-600 to-olive-700 text-white py-3 rounded-xl font-medium flex items-center justify-center space-x-2"
+                  className="w-full bg-gradient-to-r from-amber-500 to-bronze-600 text-white py-3 rounded-xl font-medium flex items-center justify-center space-x-2 shadow-3d"
                 >
                   <ExternalLink className="w-4 h-4" />
                   <span>Open Zerodha Login</span>
@@ -651,7 +710,7 @@ const BrokerConnection: React.FC = () => {
                   onClick={() => setAuthenticationStep(null)}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  className="w-full bg-dark-700 text-olive-200 py-3 rounded-xl font-medium"
+                  className="w-full bg-beige-100 text-bronze-700 py-3 rounded-xl font-medium border border-beige-200"
                 >
                   Cancel
                 </motion.button>
@@ -674,11 +733,11 @@ const BrokerConnection: React.FC = () => {
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: -20 }}
-              className="bg-dark-800 rounded-2xl p-6 max-w-md w-full border border-olive-500/20 max-h-[90vh] overflow-y-auto"
+              className="bg-white rounded-2xl p-6 max-w-md w-full border border-beige-200 max-h-[90vh] overflow-y-auto shadow-3d"
             >
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-white flex items-center">
-                  <Link className="w-6 h-6 mr-2 text-olive-400" />
+                <h2 className="text-2xl font-bold text-bronze-800 flex items-center">
+                  <Link className="w-6 h-6 mr-2 text-amber-600" />
                   Connect Broker
                 </h2>
                 <motion.button
@@ -689,7 +748,7 @@ const BrokerConnection: React.FC = () => {
                   }}
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
-                  className="text-olive-400 hover:text-olive-300 text-xl"
+                  className="text-bronze-600 hover:text-bronze-500 text-xl"
                 >
                   ✕
                 </motion.button>
@@ -697,12 +756,12 @@ const BrokerConnection: React.FC = () => {
               
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium text-olive-200 mb-2">
+                  <label className="block text-sm font-medium text-bronze-700 mb-2">
                     Select Broker
                   </label>
                   <select
                     {...register('brokerName', { required: 'Please select a broker' })}
-                    className="w-full px-4 py-3 bg-dark-800/50 border border-olive-500/20 rounded-xl text-white focus:ring-2 focus:ring-olive-500 focus:border-transparent backdrop-blur-sm"
+                    className="w-full px-4 py-3 bg-cream-50 border border-beige-200 rounded-xl text-bronze-800 focus:ring-2 focus:ring-amber-500 focus:border-transparent backdrop-blur-sm"
                   >
                     <option value="">Choose a broker...</option>
                     {brokers.map(broker => (
@@ -712,7 +771,7 @@ const BrokerConnection: React.FC = () => {
                     ))}
                   </select>
                   {errors.brokerName && (
-                    <p className="mt-1 text-sm text-red-400">{errors.brokerName.message}</p>
+                    <p className="mt-1 text-sm text-red-600">{errors.brokerName.message}</p>
                   )}
                 </div>
 
@@ -723,56 +782,68 @@ const BrokerConnection: React.FC = () => {
                     className="space-y-6"
                   >
                     <div>
-                      <label className="block text-sm font-medium text-olive-200 mb-2">
+                      <label className="block text-sm font-medium text-bronze-700 mb-2">
+                        Connection Name (Optional)
+                      </label>
+                      <input
+                        {...register('connectionName')}
+                        type="text"
+                        className="w-full px-4 py-3 bg-cream-50 border border-beige-200 rounded-xl text-bronze-800 placeholder-bronze-400 focus:ring-2 focus:ring-amber-500 focus:border-transparent backdrop-blur-sm"
+                        placeholder="My Trading Account"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-bronze-700 mb-2">
                         API Key
                       </label>
                       <input
                         {...register('apiKey', { required: 'API Key is required' })}
                         type="text"
-                        className="w-full px-4 py-3 bg-dark-800/50 border border-olive-500/20 rounded-xl text-white placeholder-olive-300/50 focus:ring-2 focus:ring-olive-500 focus:border-transparent backdrop-blur-sm"
+                        className="w-full px-4 py-3 bg-cream-50 border border-beige-200 rounded-xl text-bronze-800 placeholder-bronze-400 focus:ring-2 focus:ring-amber-500 focus:border-transparent backdrop-blur-sm"
                         placeholder="Enter your API key"
                       />
                       {errors.apiKey && (
-                        <p className="mt-1 text-sm text-red-400">{errors.apiKey.message}</p>
+                        <p className="mt-1 text-sm text-red-600">{errors.apiKey.message}</p>
                       )}
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-olive-200 mb-2">
+                      <label className="block text-sm font-medium text-bronze-700 mb-2">
                         API Secret
                       </label>
                       <div className="relative">
                         <input
                           {...register('apiSecret', { required: 'API Secret is required' })}
                           type={showApiSecret ? 'text' : 'password'}
-                          className="w-full px-4 py-3 pr-12 bg-dark-800/50 border border-olive-500/20 rounded-xl text-white placeholder-olive-300/50 focus:ring-2 focus:ring-olive-500 focus:border-transparent backdrop-blur-sm"
+                          className="w-full px-4 py-3 pr-12 bg-cream-50 border border-beige-200 rounded-xl text-bronze-800 placeholder-bronze-400 focus:ring-2 focus:ring-amber-500 focus:border-transparent backdrop-blur-sm"
                           placeholder="Enter your API secret"
                         />
                         <button
                           type="button"
                           onClick={() => setShowApiSecret(!showApiSecret)}
-                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-olive-400/50 hover:text-olive-300/70 transition-colors"
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-bronze-400 hover:text-bronze-600 transition-colors"
                         >
                           {showApiSecret ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                         </button>
                       </div>
                       {errors.apiSecret && (
-                        <p className="mt-1 text-sm text-red-400">{errors.apiSecret.message}</p>
+                        <p className="mt-1 text-sm text-red-600">{errors.apiSecret.message}</p>
                       )}
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-olive-200 mb-2">
+                      <label className="block text-sm font-medium text-bronze-700 mb-2">
                         User ID
                       </label>
                       <input
                         {...register('userId', { required: 'User ID is required' })}
                         type="text"
-                        className="w-full px-4 py-3 bg-dark-800/50 border border-olive-500/20 rounded-xl text-white placeholder-olive-300/50 focus:ring-2 focus:ring-olive-500 focus:border-transparent backdrop-blur-sm"
+                        className="w-full px-4 py-3 bg-cream-50 border border-beige-200 rounded-xl text-bronze-800 placeholder-bronze-400 focus:ring-2 focus:ring-amber-500 focus:border-transparent backdrop-blur-sm"
                         placeholder="Enter your user ID"
                       />
                       {errors.userId && (
-                        <p className="mt-1 text-sm text-red-400">{errors.userId.message}</p>
+                        <p className="mt-1 text-sm text-red-600">{errors.userId.message}</p>
                       )}
                     </div>
 
@@ -782,7 +853,7 @@ const BrokerConnection: React.FC = () => {
                         whileTap={{ scale: 0.98 }}
                         type="submit"
                         disabled={isSubmitting}
-                        className="flex-1 bg-gradient-to-r from-olive-600 to-olive-700 text-white py-3 rounded-xl font-medium hover:shadow-lg transition-all flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex-1 bg-gradient-to-r from-amber-500 to-bronze-600 text-white py-3 rounded-xl font-medium hover:shadow-3d-hover transition-all flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-3d"
                       >
                         <Link className="w-4 h-4" />
                         <span>{isSubmitting ? 'Connecting...' : 'Connect Broker'}</span>
@@ -797,7 +868,7 @@ const BrokerConnection: React.FC = () => {
                         }}
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        className="px-6 py-3 bg-dark-700 text-olive-200 rounded-xl font-medium hover:bg-dark-600 transition-colors"
+                        className="px-6 py-3 bg-beige-100 text-bronze-700 rounded-xl font-medium hover:bg-beige-200 transition-colors border border-beige-200"
                       >
                         Cancel
                       </motion.button>
@@ -823,11 +894,11 @@ const BrokerConnection: React.FC = () => {
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: -20 }}
-              className="bg-dark-800 rounded-2xl p-6 max-w-md w-full border border-olive-500/20 max-h-[90vh] overflow-y-auto"
+              className="bg-white rounded-2xl p-6 max-w-md w-full border border-beige-200 max-h-[90vh] overflow-y-auto shadow-3d"
             >
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-white flex items-center">
-                  <Edit3 className="w-6 h-6 mr-2 text-olive-400" />
+                <h2 className="text-2xl font-bold text-bronze-800 flex items-center">
+                  <Edit3 className="w-6 h-6 mr-2 text-amber-600" />
                   Edit {editingConnection.broker_name.charAt(0).toUpperCase() + editingConnection.broker_name.slice(1)} Settings
                 </h2>
                 <motion.button
@@ -838,74 +909,86 @@ const BrokerConnection: React.FC = () => {
                   }}
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
-                  className="text-olive-400 hover:text-olive-300 text-xl"
+                  className="text-bronze-600 hover:text-bronze-500 text-xl"
                 >
                   ✕
                 </motion.button>
               </div>
 
-              <div className="bg-yellow-800/20 border border-yellow-500/30 rounded-lg p-4 mb-6">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
                 <div className="flex items-center space-x-2 mb-2">
-                  <AlertCircle className="w-4 h-4 text-yellow-400" />
-                  <span className="text-yellow-300 text-sm font-medium">Security Notice</span>
+                  <AlertCircle className="w-4 h-4 text-amber-600" />
+                  <span className="text-amber-700 text-sm font-medium">Security Notice</span>
                 </div>
-                <p className="text-yellow-200/70 text-xs">
+                <p className="text-amber-600 text-xs">
                   For security reasons, existing API credentials are not displayed. Enter new credentials to update your connection.
                 </p>
               </div>
               
               <form onSubmit={handleSubmit(onEditSubmit)} className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium text-olive-200 mb-2">
+                  <label className="block text-sm font-medium text-bronze-700 mb-2">
+                    Connection Name
+                  </label>
+                  <input
+                    {...register('connectionName')}
+                    type="text"
+                    className="w-full px-4 py-3 bg-cream-50 border border-beige-200 rounded-xl text-bronze-800 placeholder-bronze-400 focus:ring-2 focus:ring-amber-500 focus:border-transparent backdrop-blur-sm"
+                    placeholder="My Trading Account"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-bronze-700 mb-2">
                     API Key
                   </label>
                   <input
                     {...register('apiKey', { required: 'API Key is required' })}
                     type="text"
-                    className="w-full px-4 py-3 bg-dark-800/50 border border-olive-500/20 rounded-xl text-white placeholder-olive-300/50 focus:ring-2 focus:ring-olive-500 focus:border-transparent backdrop-blur-sm"
+                    className="w-full px-4 py-3 bg-cream-50 border border-beige-200 rounded-xl text-bronze-800 placeholder-bronze-400 focus:ring-2 focus:ring-amber-500 focus:border-transparent backdrop-blur-sm"
                     placeholder="Enter new API key"
                   />
                   {errors.apiKey && (
-                    <p className="mt-1 text-sm text-red-400">{errors.apiKey.message}</p>
+                    <p className="mt-1 text-sm text-red-600">{errors.apiKey.message}</p>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-olive-200 mb-2">
+                  <label className="block text-sm font-medium text-bronze-700 mb-2">
                     API Secret
                   </label>
                   <div className="relative">
                     <input
                       {...register('apiSecret', { required: 'API Secret is required' })}
                       type={showApiSecret ? 'text' : 'password'}
-                      className="w-full px-4 py-3 pr-12 bg-dark-800/50 border border-olive-500/20 rounded-xl text-white placeholder-olive-300/50 focus:ring-2 focus:ring-olive-500 focus:border-transparent backdrop-blur-sm"
+                      className="w-full px-4 py-3 pr-12 bg-cream-50 border border-beige-200 rounded-xl text-bronze-800 placeholder-bronze-400 focus:ring-2 focus:ring-amber-500 focus:border-transparent backdrop-blur-sm"
                       placeholder="Enter new API secret"
                     />
                     <button
                       type="button"
                       onClick={() => setShowApiSecret(!showApiSecret)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-olive-400/50 hover:text-olive-300/70 transition-colors"
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-bronze-400 hover:text-bronze-600 transition-colors"
                     >
                       {showApiSecret ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
                   </div>
                   {errors.apiSecret && (
-                    <p className="mt-1 text-sm text-red-400">{errors.apiSecret.message}</p>
+                    <p className="mt-1 text-sm text-red-600">{errors.apiSecret.message}</p>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-olive-200 mb-2">
+                  <label className="block text-sm font-medium text-bronze-700 mb-2">
                     User ID
                   </label>
                   <input
                     {...register('userId', { required: 'User ID is required' })}
                     type="text"
-                    className="w-full px-4 py-3 bg-dark-800/50 border border-olive-500/20 rounded-xl text-white placeholder-olive-300/50 focus:ring-2 focus:ring-olive-500 focus:border-transparent backdrop-blur-sm"
+                    className="w-full px-4 py-3 bg-cream-50 border border-beige-200 rounded-xl text-bronze-800 placeholder-bronze-400 focus:ring-2 focus:ring-amber-500 focus:border-transparent backdrop-blur-sm"
                     placeholder="Enter your user ID"
                   />
                   {errors.userId && (
-                    <p className="mt-1 text-sm text-red-400">{errors.userId.message}</p>
+                    <p className="mt-1 text-sm text-red-600">{errors.userId.message}</p>
                   )}
                 </div>
 
@@ -915,7 +998,7 @@ const BrokerConnection: React.FC = () => {
                     whileTap={{ scale: 0.98 }}
                     type="submit"
                     disabled={isSubmitting}
-                    className="flex-1 bg-gradient-to-r from-olive-600 to-olive-700 text-white py-3 rounded-xl font-medium hover:shadow-lg transition-all flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 bg-gradient-to-r from-amber-500 to-bronze-600 text-white py-3 rounded-xl font-medium hover:shadow-3d-hover transition-all flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-3d"
                   >
                     <Settings className="w-4 h-4" />
                     <span>{isSubmitting ? 'Updating...' : 'Update Settings'}</span>
@@ -930,7 +1013,7 @@ const BrokerConnection: React.FC = () => {
                     }}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    className="px-6 py-3 bg-dark-700 text-olive-200 rounded-xl font-medium hover:bg-dark-600 transition-colors"
+                    className="px-6 py-3 bg-beige-100 text-bronze-700 rounded-xl font-medium hover:bg-beige-200 transition-colors border border-beige-200"
                   >
                     Cancel
                   </motion.button>
@@ -938,7 +1021,7 @@ const BrokerConnection: React.FC = () => {
               </form>
             </motion.div>
           </motion.div>
-        )}Add commentMore actions
+        )}
       </AnimatePresence>
     </div>
   );

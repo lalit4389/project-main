@@ -30,27 +30,27 @@ const DashboardLayout: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-dark-950 pt-20">
+    <div className="min-h-screen bg-gradient-to-br from-cream-50 to-beige-100 pt-20">
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div 
           className="fixed inset-0 z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         >
-          <div className="fixed inset-0 bg-dark-900 bg-opacity-75" />
+          <div className="fixed inset-0 bg-black bg-opacity-50" />
         </div>
       )}
 
       {/* Sidebar */}
       <div className={`
-        fixed top-20 left-0 z-50 w-64 h-full bg-dark-900/95 backdrop-blur-xl shadow-2xl border-r border-olive-500/20 transform transition-transform duration-300 ease-in-out lg:translate-x-0
+        fixed top-20 left-0 z-50 w-64 h-full bg-white/95 backdrop-blur-xl shadow-3d border-r border-beige-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
-        <div className="flex items-center justify-between p-4 border-b border-olive-500/20 lg:hidden">
-          <span className="text-lg font-semibold text-olive-300">Menu</span>
+        <div className="flex items-center justify-between p-4 border-b border-beige-200 lg:hidden">
+          <span className="text-lg font-semibold text-bronze-700">Menu</span>
           <button
             onClick={() => setSidebarOpen(false)}
-            className="p-2 rounded-lg text-olive-400 hover:text-olive-300 hover:bg-olive-800/20"
+            className="p-2 rounded-lg text-bronze-600 hover:text-bronze-500 hover:bg-beige-100"
           >
             <X className="w-5 h-5" />
           </button>
@@ -58,21 +58,27 @@ const DashboardLayout: React.FC = () => {
 
         <nav className="p-4 space-y-2">
           {navigation.map((item) => (
-            <Link
+            <motion.div
               key={item.name}
-              to={item.href}
-              onClick={() => setSidebarOpen(false)}
-              className={`
-                flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200
-                ${isActive(item.href)
-                  ? 'bg-gradient-to-r from-olive-600 to-olive-700 text-white shadow-lg'
-                  : 'text-olive-200 hover:bg-olive-800/20 hover:text-olive-100'
-                }
-              `}
+              whileHover={{ scale: 1.02, x: 5 }}
+              whileTap={{ scale: 0.98 }}
             >
-              <item.icon className="w-5 h-5" />
-              <span className="font-medium">{item.name}</span>
-            </Link>
+              <Link
+                to={item.href}
+                onClick={() => setSidebarOpen(false)}
+                className={`
+                  flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 shadow-3d hover:shadow-3d-hover
+                  ${isActive(item.href)
+                    ? 'bg-gradient-to-r from-amber-500 to-bronze-600 text-white'
+                    : 'text-bronze-700 hover:bg-beige-100 hover:text-bronze-800'
+                  }
+                `}
+                style={{ transformStyle: 'preserve-3d' }}
+              >
+                <item.icon className="w-5 h-5" />
+                <span className="font-medium">{item.name}</span>
+              </Link>
+            </motion.div>
           ))}
         </nav>
       </div>
@@ -81,12 +87,14 @@ const DashboardLayout: React.FC = () => {
       <div className="lg:pl-64">
         <div className="p-4 sm:p-6 lg:p-8">
           {/* Mobile menu button */}
-          <button
+          <motion.button
             onClick={() => setSidebarOpen(true)}
-            className="mb-6 p-2 rounded-lg text-olive-400 hover:text-olive-300 hover:bg-dark-800/50 shadow-lg lg:hidden"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="mb-6 p-2 rounded-lg text-bronze-600 hover:text-bronze-500 hover:bg-white/50 shadow-3d lg:hidden"
           >
             <Menu className="w-6 h-6" />
-          </button>
+          </motion.button>
 
           {/* Page content */}
           <motion.div
