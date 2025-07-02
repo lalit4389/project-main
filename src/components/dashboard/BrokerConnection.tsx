@@ -234,8 +234,13 @@ const BrokerConnection: React.FC = () => {
       }
     } catch (error: any) {
       console.error('Failed to initiate reconnection:', error);
-      toast.error('Failed to start reconnection process');
+      toast.error(error.response?.data?.error || 'Failed to start reconnection process');
       setAuthenticatingConnection(null);
+      
+      // If it's a 404 error, refresh connections to update UI state
+      if (error.response?.status === 404) {
+        fetchConnections();
+      }
     }
   };
 

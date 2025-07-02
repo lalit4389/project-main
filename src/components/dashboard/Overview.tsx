@@ -91,6 +91,11 @@ const Overview: React.FC = () => {
       }
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Failed to refresh token');
+      
+      // If it's a 404 error, refresh dashboard data to update UI state
+      if (error.response?.status === 404) {
+        fetchDashboardData();
+      }
     } finally {
       setRefreshingToken(null);
     }
