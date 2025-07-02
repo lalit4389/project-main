@@ -49,6 +49,7 @@ const BrokerConnection: React.FC = () => {
   const [showEditForm, setShowEditForm] = useState(false);
   const [deletingConnection, setDeletingConnection] = useState<number | null>(null);
   
+  
   const { register, handleSubmit, watch, reset, setValue, formState: { errors } } = useForm<BrokerConnectionForm>();
   const selectedBroker = watch('brokerName');
 
@@ -85,6 +86,7 @@ const BrokerConnection: React.FC = () => {
 
   const fetchConnections = async () => {
     try {
+      setLoading(true);
       const response = await brokerAPI.getConnections();
       setConnections(response.data.connections);
     } catch (error) {
@@ -102,7 +104,6 @@ const BrokerConnection: React.FC = () => {
       const response = await brokerAPI.connect(data);
       
       if (response.data.requiresAuth && response.data.loginUrl) {
-        // Show authentication step for Zerodha
         setAuthenticationStep({
           connectionId: response.data.connectionId,
           loginUrl: response.data.loginUrl
@@ -117,7 +118,15 @@ const BrokerConnection: React.FC = () => {
       }
     } catch (error: any) {
       console.error('Broker connection error:', error);
-      toast.error(error.response?.data?.error || 'Failed to connect broker');
+      const errorMessage = error.response?.data?.error || 'Failed to connect broker';
+      toast.error(errorMessage);
+      
+      if (error.response?.data?.errors) {
+        const errors = error.response.data.errors;
+        Object.keys(errors).forEach(key => {
+          toast.error(`${key}: ${errors[key]}`);
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -128,14 +137,12 @@ const BrokerConnection: React.FC = () => {
     
     setIsSubmitting(true);
     try {
-      console.log('Updating broker connection:', data);
       const response = await brokerAPI.connect({
         ...data,
         brokerName: editingConnection.broker_name
       });
       
       if (response.data.requiresAuth && response.data.loginUrl) {
-        // Show authentication step for Zerodha
         setAuthenticationStep({
           connectionId: response.data.connectionId,
           loginUrl: response.data.loginUrl
@@ -157,7 +164,6 @@ const BrokerConnection: React.FC = () => {
   };
 
   const handleConnectClick = (brokerId: string) => {
-    // Allow multiple connections to the same broker
     setSelectedBrokerForConnection(brokerId);
     setValue('brokerName', brokerId);
     setValue('apiKey', '');
@@ -169,14 +175,13 @@ const BrokerConnection: React.FC = () => {
 
   const handleEditConnection = async (connection: BrokerConnection) => {
     try {
-      // Fetch connection details
       const response = await brokerAPI.getConnection(connection.id);
       const connectionDetails = response.data.connection;
       
       setEditingConnection(connection);
       setValue('brokerName', connection.broker_name);
-      setValue('apiKey', ''); // Don't pre-fill for security
-      setValue('apiSecret', ''); // Don't pre-fill for security
+      setValue('apiKey', '');
+      setValue('apiSecret', '');
       setValue('userId', connectionDetails.user_id_broker || '');
       setValue('connectionName', connection.connection_name || '');
       setShowEditForm(true);
@@ -189,7 +194,6 @@ const BrokerConnection: React.FC = () => {
   const handleZerodhaAuth = (connectionId: number, loginUrl: string) => {
     setAuthenticatingConnection(connectionId);
     
-    // Open Zerodha login in new window
     const authWindow = window.open(
       loginUrl,
       'zerodha-auth',
@@ -197,11 +201,9 @@ const BrokerConnection: React.FC = () => {
     );
 
     if (authWindow) {
-      // Check if window is closed every second
       const checkClosed = setInterval(() => {
         if (authWindow.closed) {
           clearInterval(checkClosed);
-          // Refresh connections to see if auth was completed
           setTimeout(() => {
             fetchConnections();
             setAuthenticationStep(null);
@@ -210,7 +212,6 @@ const BrokerConnection: React.FC = () => {
         }
       }, 1000);
 
-      // Auto-close check after 5 minutes
       setTimeout(() => {
         if (!authWindow.closed) {
           authWindow.close();
@@ -225,43 +226,53 @@ const BrokerConnection: React.FC = () => {
   };
 
   const handleReconnect = async (connectionId: number) => {
-    try {
-      setAuthenticatingConnection(connectionId);
-      const response = await brokerAPI.refreshToken(connectionId);
-      
-      if (response.data.loginUrl) {
-        handleZerodhaAuth(connectionId, response.data.loginUrl);
-      }
-    } catch (error: any) {
-      console.error('Failed to initiate reconnection:', error);
-      toast.error(error.response?.data?.error || 'Failed to start reconnection process');
-      setAuthenticatingConnection(null);
-      
-      // If it's a 404 error, refresh connections to update UI state
-      if (error.response?.status === 404) {
-        fetchConnections();
-      }
+  try {
+    setAuthenticatingConnection(connectionId);
+    const response = await brokerAPI.refreshToken(connectionId);
+    
+    if (response.data.loginUrl) {
+      // For OAuth brokers like Zerodha
+      handleZerodhaAuth(connectionId, response.data.loginUrl);
+    } else {
+      // For non-OAuth brokers
+      toast.success('Reconnected successfully!');
+      fetchConnections(); // Refresh the connections list
     }
-  };
+  } catch (error: any) {
+    console.error('Reconnection failed:', error);
+    
+    // More specific error handling
+    if (error.response?.status === 404) {
+      toast.error('Connection not found. Please add the broker again.');
+      fetchConnections(); // Refresh to update UI
+    } else if (error.response?.status === 401) {
+      toast.error('Session expired. Please re-authenticate.');
+    } else {
+      toast.error(error.response?.data?.error || 'Failed to reconnect');
+    }
+  } finally {
+    setAuthenticatingConnection(null);
+  }
+};
 
   const disconnectBroker = async (connectionId: number) => {
-    if (!confirm('Are you sure you want to disconnect this broker?')) {
-      return;
-    }
+    if (!confirm('Are you sure you want to disconnect this broker?')) return;
 
     try {
       await brokerAPI.disconnect(connectionId);
       toast.success('Broker disconnected successfully!');
-      fetchConnections();
+      // Immediately update local state before refetching
+      setConnections(prev => prev.map(conn => 
+        conn.id === connectionId ? { ...conn, is_active: false } : conn
+      ));
+      fetchConnections(); // Then refresh from server
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Failed to disconnect broker');
     }
   };
 
   const deleteBrokerConnection = async (connectionId: number) => {
-    if (!confirm('Are you sure you want to permanently delete this broker connection? This action cannot be undone.')) {
-      return;
-    }
+    if (!confirm('Are you sure you want to permanently delete this broker connection? This action cannot be undone.')) return;
 
     setDeletingConnection(connectionId);
     try {
@@ -306,9 +317,19 @@ const BrokerConnection: React.FC = () => {
     }
   };
 
-  const getConnectionStatusInfo = (connection: any) => {
+  const getConnectionStatusInfo = (connection: BrokerConnection) => {
     const now = Math.floor(Date.now() / 1000);
     
+    if (!connection.is_active) {
+      return {
+        status: 'Disconnected',
+        color: 'text-red-600',
+        bgColor: 'bg-red-100',
+        icon: WifiOff,
+        action: 'reconnect'
+      };
+    }
+
     if (!connection.is_authenticated) {
       return {
         status: 'Not Authenticated',
@@ -344,7 +365,7 @@ const BrokerConnection: React.FC = () => {
       status: 'Connected',
       color: 'text-green-600',
       bgColor: 'bg-green-100',
-      icon: CheckCircle,
+      icon: Wifi,
       action: null
     };
   };
@@ -359,7 +380,7 @@ const BrokerConnection: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-cream-50 to-beige-100 p-6 space-y-8">
-      {/* Enhanced Header with 3D Effects */}
+      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 20, rotateX: -10 }}
         animate={{ opacity: 1, y: 0, rotateX: 0 }}
@@ -370,27 +391,27 @@ const BrokerConnection: React.FC = () => {
           <p className="text-bronze-600">Connect your broker accounts to enable automated trading</p>
         </div>
         <motion.button
-          onClick={() => setShowConnectionForm(true)}
+          onClick={() => {
+            setShowConnectionForm(true);
+            setSelectedBrokerForConnection('');
+            reset();
+          }}
           whileHover={{ scale: 1.05, rotateX: 5 }}
           whileTap={{ scale: 0.95 }}
           className="mt-4 sm:mt-0 bg-gradient-to-r from-amber-500 to-bronze-600 text-white px-6 py-3 rounded-xl font-medium flex items-center space-x-2 hover:shadow-3d-hover transition-all shadow-3d"
-          style={{ transformStyle: 'preserve-3d' }}
         >
           <Plus className="w-5 h-5" />
           <span>Add Broker</span>
         </motion.button>
       </motion.div>
 
-      {/* Enhanced Security Notice */}
+      {/* Security Notice */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
         whileHover={{ scale: 1.01, rotateX: 2 }}
         className="bg-white/80 backdrop-blur-xl border border-beige-200 rounded-2xl p-6 shadow-3d"
-        style={{ 
-          transformStyle: 'preserve-3d',
-        }}
       >
         <div className="flex items-start space-x-4">
           <motion.div
@@ -435,8 +456,8 @@ const BrokerConnection: React.FC = () => {
                   transition={{ duration: 0.6, delay: index * 0.1 }}
                   whileHover={{ scale: 1.02, rotateY: 2 }}
                   className="bg-cream-50 rounded-2xl p-6 border border-beige-200 shadow-3d hover:shadow-3d-hover transition-all"
-                  style={{ transformStyle: 'preserve-3d' }}
                 >
+                  {/* Connection Header */}
                   <div className="text-center mb-4">
                     <div className="text-4xl mb-3">{broker?.logo || '🏦'}</div>
                     <h3 className="font-bold text-bronze-800 text-lg capitalize">
@@ -453,7 +474,7 @@ const BrokerConnection: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Reconnect Button for expired tokens */}
+                  {/* Reconnect/Authentication Notice */}
                   {(statusInfo.action === 'reconnect' || statusInfo.action === 'authenticate') && (
                     <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
                       <div className="flex items-center space-x-2 mb-2">
@@ -517,6 +538,8 @@ const BrokerConnection: React.FC = () => {
                     </div>
                   )}
 
+                  
+
                   {/* Action Buttons */}
                   <div className="space-y-2">
                     {connection.is_authenticated && (
@@ -555,6 +578,7 @@ const BrokerConnection: React.FC = () => {
                       <span>Edit Settings</span>
                     </motion.button>
                     
+                    {/* Connection Management Buttons */}
                     {connection.is_active ? (
                       <motion.button
                         onClick={() => disconnectBroker(connection.id)}
@@ -565,25 +589,37 @@ const BrokerConnection: React.FC = () => {
                         Disconnect
                       </motion.button>
                     ) : (
-                      <motion.button
-                        onClick={() => deleteBrokerConnection(connection.id)}
-                        disabled={deletingConnection === connection.id}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        className="w-full bg-red-500 text-white py-2 rounded-lg hover:bg-red-600 transition-colors text-sm flex items-center justify-center space-x-2 disabled:opacity-50 shadow-3d"
-                      >
-                        {deletingConnection === connection.id ? (
-                          <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <motion.button
+                          onClick={() => handleReconnect(connection.id)}
+                          disabled={authenticatingConnection === connection.id}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          className="bg-amber-500 text-white py-2 rounded-lg hover:bg-amber-600 transition-colors flex items-center justify-center space-x-1 text-sm disabled:opacity-50 shadow-3d"
+                        >
+                          {authenticatingConnection === connection.id ? (
                             <RefreshCw className="w-4 h-4 animate-spin" />
-                            <span>Deleting...</span>
-                          </>
-                        ) : (
-                          <>
+                          ) : (
+                            <RefreshCw className="w-4 h-4" />
+                          )}
+                          <span>Reconnect</span>
+                        </motion.button>
+
+                        <motion.button
+                          onClick={() => deleteBrokerConnection(connection.id)}
+                          disabled={deletingConnection === connection.id}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          className="bg-red-500 text-white py-2 rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center space-x-1 text-sm disabled:opacity-50 shadow-3d"
+                        >
+                          {deletingConnection === connection.id ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : (
                             <Trash2 className="w-4 h-4" />
-                            <span>Delete</span>
-                          </>
-                        )}
-                      </motion.button>
+                          )}
+                          <span>Delete</span>
+                        </motion.button>
+                      </div>
                     )}
                   </div>
                 </motion.div>
@@ -592,7 +628,6 @@ const BrokerConnection: React.FC = () => {
           </div>
         </motion.div>
       )}
-
       {/* Available Brokers Grid */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -600,9 +635,6 @@ const BrokerConnection: React.FC = () => {
         transition={{ delay: 0.3 }}
         whileHover={{ scale: 1.005 }}
         className="bg-white/80 backdrop-blur-xl rounded-2xl p-6 border border-beige-200 shadow-3d"
-        style={{ 
-          transformStyle: 'preserve-3d',
-        }}
       >
         <h2 className="text-2xl font-bold text-bronze-800 mb-6 flex items-center">
           <Zap className="w-6 h-6 mr-2 text-amber-600" />
@@ -625,9 +657,6 @@ const BrokerConnection: React.FC = () => {
                   rotateX: 5,
                 }}
                 className="group p-6 rounded-2xl border-2 border-beige-200 bg-cream-50 hover:border-amber-300 transition-all duration-500 shadow-3d hover:shadow-3d-hover"
-                style={{ 
-                  transformStyle: 'preserve-3d',
-                }}
               >
                 <div className="text-center">
                   <motion.div 
@@ -725,7 +754,7 @@ const BrokerConnection: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Enhanced Connection Form */}
+      {/* Connection Form */}
       <AnimatePresence>
         {showConnectionForm && (
           <motion.div
@@ -767,6 +796,11 @@ const BrokerConnection: React.FC = () => {
                   <select
                     {...register('brokerName', { required: 'Please select a broker' })}
                     className="w-full px-4 py-3 bg-cream-50 border border-beige-200 rounded-xl text-bronze-800 focus:ring-2 focus:ring-amber-500 focus:border-transparent backdrop-blur-sm"
+                    value={selectedBrokerForConnection || ''}
+                    onChange={(e) => {
+                      setSelectedBrokerForConnection(e.target.value);
+                      setValue('brokerName', e.target.value);
+                    }}
                   >
                     <option value="">Choose a broker...</option>
                     {brokers.map(broker => (
