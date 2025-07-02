@@ -25,7 +25,7 @@ const Brokers: React.FC = () => {
   ];
 
   return (
-    <section className="py-20 bg-dark-900">
+    <section className="py-20 bg-gradient-to-b from-sand-200 to-beige-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
@@ -34,11 +34,11 @@ const Brokers: React.FC = () => {
           viewport={{ once: true }}
           className="text-center mb-16"
         >
-          <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
+          <h2 className="text-4xl md:text-5xl font-bold text-bronze-800 mb-6">
             Supported 
-            <span className="bg-gradient-to-r from-olive-400 to-olive-600 bg-clip-text text-transparent"> Brokers</span>
+            <span className="bg-gradient-to-r from-amber-600 to-bronze-700 bg-clip-text text-transparent"> Brokers</span>
           </h2>
-          <p className="text-xl text-olive-200/70 max-w-3xl mx-auto">
+          <p className="text-xl text-bronze-600 max-w-3xl mx-auto">
             Connect with India's leading brokers and start automating your trades today
           </p>
         </motion.div>
@@ -51,16 +51,22 @@ const Brokers: React.FC = () => {
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: index * 0.2 }}
               viewport={{ once: true }}
-              className="group bg-dark-800/30 backdrop-blur-xl rounded-2xl p-8 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 border border-olive-500/20 hover:border-olive-400/40"
+              whileHover={{ 
+                scale: 1.05,
+                rotateY: 5,
+                rotateX: 5,
+              }}
+              className="group bg-white/80 backdrop-blur-xl rounded-2xl p-8 hover:shadow-3d-hover transition-all duration-500 border border-beige-200 hover:border-amber-300 shadow-3d"
+              style={{ transformStyle: 'preserve-3d' }}
             >
               <div className="text-center mb-6">
                 <div className="text-6xl mb-4 group-hover:scale-110 transition-transform duration-300">
                   {broker.logo}
                 </div>
-                <h3 className="text-2xl font-bold text-white mb-2 group-hover:text-olive-300 transition-colors">
+                <h3 className="text-2xl font-bold text-bronze-800 mb-2 group-hover:text-amber-700 transition-colors">
                   {broker.name}
                 </h3>
-                <p className="text-olive-200/70 mb-6">
+                <p className="text-bronze-600 mb-6">
                   {broker.description}
                 </p>
               </div>
@@ -68,16 +74,16 @@ const Brokers: React.FC = () => {
               <div className="space-y-3">
                 {broker.features.map((feature, featureIndex) => (
                   <div key={featureIndex} className="flex items-center space-x-3">
-                    <CheckCircle className="w-5 h-5 text-olive-400 flex-shrink-0" />
-                    <span className="text-olive-200">{feature}</span>
+                    <CheckCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                    <span className="text-bronze-700">{feature}</span>
                   </div>
                 ))}
               </div>
 
-              <div className="mt-6 pt-6 border-t border-olive-500/20">
-                <button className="w-full bg-gradient-to-r from-olive-600 to-olive-700 text-white py-3 rounded-lg font-semibold hover:shadow-lg transition-all transform hover:scale-105 opacity-80 group-hover:opacity-100">
-                  Connect {broker.name}
-                </button>
+              <div className="mt-6 pt-6 border-t border-beige-200">
+                <div className="text-center text-bronze-600 font-medium">
+                  Available in Dashboard
+                </div>
               </div>
             </motion.div>
           ))}
@@ -88,12 +94,12 @@ const Brokers: React.FC = () => {
           whileInView={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
           viewport={{ once: true }}
-          className="text-center bg-gradient-to-r from-dark-800/50 to-olive-800/30 backdrop-blur-xl rounded-2xl p-8 border border-olive-500/20"
+          className="text-center bg-white/80 backdrop-blur-xl rounded-2xl p-8 border border-beige-200 shadow-3d"
         >
-          <h3 className="text-2xl font-bold text-white mb-4">
+          <h3 className="text-2xl font-bold text-bronze-800 mb-4">
             More Brokers Coming Soon
           </h3>
-          <p className="text-olive-200/70 mb-6">
+          <p className="text-bronze-600 mb-6">
             We're constantly expanding our broker integrations to give you more options
           </p>
           <div className="flex justify-center space-x-4 text-4xl opacity-50">

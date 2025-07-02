@@ -81,7 +81,17 @@ export const brokerAPI = {
   },
   disconnect: (connectionId) => api.post('/broker/disconnect', { connectionId }),
   deleteConnection: (connectionId) => api.delete(`/broker/connections/${connectionId}`),
-  refreshToken: (connectionId) => api.post(`/broker/refresh-token/${connectionId}`),
+  refreshToken: async (connectionId) => {
+    try {
+      console.log('🔄 Attempting to refresh token for connection:', connectionId);
+      const response = await api.post(`/broker/refresh-token/${connectionId}`);
+      console.log('✅ Token refresh response:', response.data);
+      return response;
+    } catch (error) {
+      console.error('❌ Token refresh failed:', error);
+      throw error;
+    }
+  },
   completeZerodhaAuth: (connectionId, requestToken) => api.post('/broker/auth/zerodha', { connectionId, requestToken }),
   syncPositions: (connectionId) => api.post(`/broker/sync/positions/${connectionId}`),
   syncHoldings: (connectionId) => api.post(`/broker/sync/holdings/${connectionId}`),
