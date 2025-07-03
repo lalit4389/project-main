@@ -170,44 +170,69 @@ router.post('/connect', authenticateToken, async (req, res) => {
 router.post('/reconnect/:connectionId', authenticateToken, async (req, res) => {
   try {
     const { connectionId } = req.params;
-    
+    console.log('--- Step 1: Incoming Request ---');
+    console.log('Input - connectionId:', connectionId);
+    console.log('Input - req.user.id (from authenticateToken):', req.user ? req.user.id : 'N/A');
+
     logger.info('🔄 Reconnecting using stored credentials for connection:', connectionId);
 
     // Get connection details with encrypted credentials
+    console.log('--- Step 2: Fetching Connection Details from DB ---');
+    console.log('DB Query: SELECT * FROM broker_connections WHERE id = ? AND user_id = ?');
+    console.log('DB Parameters:', [connectionId, req.user.id]);
     const connection = await db.getAsync(
-      'SELECT * FROM broker_connections WHERE id = ? AND user_id = ? AND is_active = 1',
+      'SELECT * FROM broker_connections WHERE id = ? AND user_id = ? ',
       [connectionId, req.user.id]
     );
+    console.log('Output - connection from DB:', connection);
 
     if (!connection) {
+      console.log('--- Step 3: Connection Not Found/Inactive ---');
+      console.log('Output - Response: 404 Not Found, error: Broker connection not found or inactive');
       return res.status(404).json({ error: 'Broker connection not found or inactive' });
     }
 
     // Check if we have the required credentials
+    console.log('--- Step 4: Checking for API Credentials ---');
+    console.log('Input - connection.api_key:', connection.api_key ? 'Present' : 'Missing');
+    console.log('Input - connection.api_secret:', connection.api_secret ? 'Present' : 'Missing');
     if (!connection.api_key || !connection.api_secret) {
-      return res.status(400).json({ 
+      console.log('Output - Response: 400 Bad Request, error: Missing API credentials');
+      return res.status(400).json({
         error: 'Missing API credentials. Please update your connection settings.',
-        needsCredentials: true 
+        needsCredentials: true
       });
     }
 
     try {
       // Decrypt stored credentials
+      console.log('--- Step 5: Decrypting Credentials ---');
+      console.log('Input - connection.api_key (encrypted):', connection.api_key);
+      console.log('Input - connection.api_secret (encrypted):', connection.api_secret);
       const apiKey = decryptData(connection.api_key);
       const apiSecret = decryptData(connection.api_secret);
-      
+      console.log('Output - apiKey (decrypted):', apiKey ? 'Decrypted Successfully' : 'Decryption Failed');
+      console.log('Output - apiSecret (decrypted):', apiSecret ? 'Decrypted Successfully' : 'Decryption Failed');
+
       logger.info('🔐 Using stored credentials to reconnect');
 
+      console.log('--- Step 6: Checking Broker Type ---');
+      console.log('Input - connection.broker_name:', connection.broker_name);
       if (connection.broker_name.toLowerCase() === 'zerodha') {
         // For Zerodha, we need user to login again to get new request token
         // This is because Zerodha's access tokens are session-based
+        console.log('--- Step 6a: Handling Zerodha Reconnection ---');
         const baseUrl = `${req.protocol}://${req.get('host')}`;
+        console.log('Calculated baseUrl:', baseUrl);
         const redirectUrl = `${baseUrl}/api/broker/auth/zerodha/callback?connection_id=${connectionId}&reconnect=true`;
+        console.log('Calculated redirectUrl:', redirectUrl);
         const loginUrl = `https://kite.zerodha.com/connect/login?api_key=${apiKey}&v=3&redirect_url=${encodeURIComponent(redirectUrl)}`;
-        
+        console.log('Generated Zerodha loginUrl:', loginUrl);
+
         logger.info('🔐 Generated reconnection login URL for Zerodha connection:', connectionId);
-        
-        res.json({ 
+
+        console.log('Output - Response: 200 OK, message: Please complete authentication..., loginUrl:', loginUrl);
+        res.json({
           message: 'Please complete authentication to reconnect your Zerodha account.',
           loginUrl,
           requiresAuth: true,
@@ -217,22 +242,30 @@ router.post('/reconnect/:connectionId', authenticateToken, async (req, res) => {
       } else {
         // For other brokers, implement direct token refresh if supported
         // This is where you'd implement direct API calls for other brokers
-        return res.status(400).json({ 
+        console.log('--- Step 6b: Handling Other Brokers (Not Supported Yet) ---');
+        console.log('Output - Response: 400 Bad Request, error: Direct reconnection not supported');
+        return res.status(400).json({
           error: 'Direct reconnection not supported for this broker. Please update your connection.',
-          brokerName: connection.broker_name 
+          brokerName: connection.broker_name
         });
       }
-      
+
     } catch (decryptError) {
+      console.log('--- Step 7: Decryption Error ---');
+      console.log('Input - decryptError:', decryptError.message);
       logger.error('❌ Failed to decrypt stored credentials:', decryptError);
-      return res.status(500).json({ 
+      console.log('Output - Response: 500 Internal Server Error, error: Failed to decrypt stored credentials');
+      return res.status(500).json({
         error: 'Failed to decrypt stored credentials. Please update your connection settings.',
-        needsCredentials: true 
+        needsCredentials: true
       });
     }
 
   } catch (error) {
+    console.log('--- Step 8: General Reconnect Error ---');
+    console.log('Input - error:', error.message);
     logger.error('❌ Reconnect error:', error);
+    console.log('Output - Response: 500 Internal Server Error, error: Failed to reconnect');
     res.status(500).json({ error: 'Failed to reconnect. Please try again.' });
   }
 });

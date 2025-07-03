@@ -12,6 +12,8 @@ interface AuthAPI {
 }
 
 interface BrokerAPI {
+  deleteConnection(connectionId: number): unknown;
+  reconnect: any;
   getConnections: () => Promise<any>;
   getConnection: (id: number) => Promise<any>;
   connect: (data: {

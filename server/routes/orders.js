@@ -8,6 +8,7 @@ const router = express.Router();
 // Get orders with enhanced filtering and real-time updates
 router.get('/', authenticateToken, async (req, res) => {
   try {
+    console.log('GET /api/orders - Request Query:', req.query);
     const { page = 1, limit = 50, status, symbol, broker_connection_id, sync = false } = req.query;
     const offset = (page - 1) * limit;
 
@@ -15,6 +16,7 @@ router.get('/', authenticateToken, async (req, res) => {
     if (sync === 'true' && broker_connection_id) {
       try {
         await syncOrdersFromBroker(req.user.id, broker_connection_id);
+        console.log('Orders synced successfully for connection:', broker_connection_id);
       } catch (syncError) {
         console.error('Failed to sync orders:', syncError);
         // Continue with database query even if sync fails
@@ -50,7 +52,9 @@ router.get('/', authenticateToken, async (req, res) => {
     query += ' ORDER BY o.created_at DESC LIMIT ? OFFSET ?';
     params.push(parseInt(limit), parseInt(offset));
 
+    console.log('Executing orders query:', query, params);
     const orders = await db.allAsync(query, params);
+    console.log('Orders fetched from DB:', orders.length, 'orders');
 
     // Get total count
     let countQuery = 'SELECT COUNT(*) as total FROM orders WHERE user_id = ?';
@@ -71,14 +75,30 @@ router.get('/', authenticateToken, async (req, res) => {
       countParams.push(parseInt(broker_connection_id));
     }
 
+    console.log('Executing count query:', countQuery, countParams);
     const { total } = await db.getAsync(countQuery, countParams);
+    console.log('Total orders count:', total);
 
     // Parse webhook_data for each order
-    const enhancedOrders = orders.map(order => ({
-      ...order,
-      webhook_data: order.webhook_data ? JSON.parse(order.webhook_data) : null,
-      status_message: order.status_message ? JSON.parse(order.status_message) : null
-    }));
+    const enhancedOrders = orders.map(order => {
+      let webhook_data = null;
+      let status_message = null;
+      try {
+        webhook_data = order.webhook_data ? JSON.parse(order.webhook_data) : null;
+      } catch (e) {
+        console.error('Error parsing webhook_data for order ID', order.id, ':', e.message, 'Data:', order.webhook_data);
+      }
+      try {
+        status_message = order.status_message ? JSON.parse(order.status_message) : null;
+      } catch (e) {
+        console.error('Error parsing status_message for order ID', order.id, ':', e.message, 'Data:', order.status_message);
+      }
+      return {
+        ...order,
+        webhook_data,
+        status_message
+      };
+    });
 
     res.json({
       orders: enhancedOrders,
@@ -166,7 +186,7 @@ router.get('/:orderId', authenticateToken, async (req, res) => {
   }
 });
 
-// Sync all orders from broker
+// Sync all orders from broker 
 router.post('/sync/:brokerConnectionId', authenticateToken, async (req, res) => {
   try {
     const { brokerConnectionId } = req.params;
@@ -197,12 +217,15 @@ router.post('/sync/:brokerConnectionId', authenticateToken, async (req, res) => 
 // Get positions with real-time updates
 router.get('/positions', authenticateToken, async (req, res) => {
   try {
+    console.log('GET /api/orders/positions - Request Query:', req.query);
     const { broker_connection_id, sync = false } = req.query;
 
     // If sync is requested, sync positions from broker first
     if (sync === 'true' && broker_connection_id) {
       try {
+        console.log('Attempting to sync positions for broker_connection_id:', broker_connection_id);
         await kiteService.syncPositions(broker_connection_id);
+        console.log('Positions synced successfully for connection:', broker_connection_id);
       } catch (syncError) {
         console.error('Failed to sync positions:', syncError);
         // Continue with database query
@@ -226,7 +249,9 @@ router.get('/positions', authenticateToken, async (req, res) => {
 
     query += ' ORDER BY p.updated_at DESC';
 
+    console.log('Executing positions query:', query, params);
     const positions = await db.allAsync(query, params);
+    console.log('Positions fetched from DB:', positions.length, 'positions');
 
     res.json({ positions });
   } catch (error) {
@@ -238,6 +263,7 @@ router.get('/positions', authenticateToken, async (req, res) => {
 // Get P&L summary with enhanced calculations
 router.get('/pnl', authenticateToken, async (req, res) => {
   try {
+    console.log('GET /api/orders/pnl - Request Query:', req.query);
     const { period = '1M', broker_connection_id } = req.query;
     
     // Calculate date range based on period
