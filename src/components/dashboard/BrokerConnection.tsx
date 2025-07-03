@@ -254,6 +254,13 @@ const BrokerConnection: React.FC = () => {
         fetchConnections(); // Refresh to update UI
       } else if (error.response?.status === 401) {
         toast.error('Session expired. Please re-authenticate.');
+      } else if (error.response?.status === 400) {
+        const errorData = error.response.data;
+        if (errorData.needsCredentials) {
+          toast.error('Missing or corrupted credentials. Please update your connection settings.');
+        } else {
+          toast.error(errorData.error || 'Failed to reconnect');
+        }
       } else if (error.response?.status === 500 && error.response?.data?.error?.includes('decrypt')) {
         toast.error('Stored credentials are corrupted. Please update your connection settings.');
       } else {
@@ -319,7 +326,11 @@ const BrokerConnection: React.FC = () => {
       const response = await brokerAPI.testConnection(connectionId);
       toast.success(`Connection test successful! Connected as ${response.data.profile.user_name}`);
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Connection test failed');
+      if (error.response?.data?.tokenExpired || error.response?.data?.needsAuth) {
+        toast.error('Access token expired. Please reconnect your account.');
+      } else {
+        toast.error(error.response?.data?.error || 'Connection test failed');
+      }
     } finally {
       setTestingConnection(null);
     }
@@ -545,7 +556,7 @@ const BrokerConnection: React.FC = () => {
 
                   {/* Action Buttons */}
                   <div className="space-y-2">
-                    {connection.is_authenticated && (
+                    {connection.is_authenticated && !statusInfo.needsReconnect && (
                       <div className="grid grid-cols-2 gap-2">
                         <motion.button 
                           onClick={() => syncPositions(connection.id)}

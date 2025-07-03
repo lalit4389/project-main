@@ -183,8 +183,12 @@ router.post('/reconnect/:connectionId', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Broker connection not found or inactive' });
     }
 
-    if (connection.broker_name.toLowerCase() !== 'zerodha') {
-      return res.status(400).json({ error: 'Reconnect with stored credentials is only supported for Zerodha currently' });
+    // Check if we have the required credentials
+    if (!connection.api_key || !connection.api_secret) {
+      return res.status(400).json({ 
+        error: 'Missing API credentials. Please update your connection settings.',
+        needsCredentials: true 
+      });
     }
 
     try {
@@ -192,26 +196,39 @@ router.post('/reconnect/:connectionId', authenticateToken, async (req, res) => {
       const apiKey = decryptData(connection.api_key);
       const apiSecret = decryptData(connection.api_secret);
       
-      logger.info('🔐 Using stored credentials to generate new access token');
-      
-      // For Zerodha, we need to redirect user to login again to get a new request token
-      // This is because Zerodha's access tokens are session-based and require user login
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
-      const redirectUrl = `${baseUrl}/api/broker/auth/zerodha/callback?connection_id=${connectionId}&reconnect=true`;
-      const loginUrl = `https://kite.zerodha.com/connect/login?api_key=${apiKey}&v=3&redirect_url=${encodeURIComponent(redirectUrl)}`;
-      
-      logger.info('🔐 Generated reconnection login URL for connection:', connectionId);
-      
-      res.json({ 
-        message: 'Please complete authentication to reconnect your account.',
-        loginUrl,
-        requiresAuth: true,
-        reconnect: true
-      });
+      logger.info('🔐 Using stored credentials to reconnect');
+
+      if (connection.broker_name.toLowerCase() === 'zerodha') {
+        // For Zerodha, we need user to login again to get new request token
+        // This is because Zerodha's access tokens are session-based
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        const redirectUrl = `${baseUrl}/api/broker/auth/zerodha/callback?connection_id=${connectionId}&reconnect=true`;
+        const loginUrl = `https://kite.zerodha.com/connect/login?api_key=${apiKey}&v=3&redirect_url=${encodeURIComponent(redirectUrl)}`;
+        
+        logger.info('🔐 Generated reconnection login URL for Zerodha connection:', connectionId);
+        
+        res.json({ 
+          message: 'Please complete authentication to reconnect your Zerodha account.',
+          loginUrl,
+          requiresAuth: true,
+          reconnect: true,
+          brokerName: 'Zerodha'
+        });
+      } else {
+        // For other brokers, implement direct token refresh if supported
+        // This is where you'd implement direct API calls for other brokers
+        return res.status(400).json({ 
+          error: 'Direct reconnection not supported for this broker. Please update your connection.',
+          brokerName: connection.broker_name 
+        });
+      }
       
     } catch (decryptError) {
       logger.error('❌ Failed to decrypt stored credentials:', decryptError);
-      return res.status(500).json({ error: 'Failed to decrypt stored credentials. Please update your connection.' });
+      return res.status(500).json({ 
+        error: 'Failed to decrypt stored credentials. Please update your connection settings.',
+        needsCredentials: true 
+      });
     }
 
   } catch (error) {
@@ -227,8 +244,38 @@ router.post('/refresh-token/:connectionId', authenticateToken, async (req, res) 
     
     logger.info('🔄 [DEPRECATED] Refresh token called, redirecting to reconnect');
     
-    // Redirect to the new reconnect endpoint
-    return res.redirect(307, `/api/broker/reconnect/${connectionId}`);
+    // Call the reconnect endpoint directly
+    const connection = await db.getAsync(
+      'SELECT * FROM broker_connections WHERE id = ? AND user_id = ? AND is_active = 1',
+      [connectionId, req.user.id]
+    );
+
+    if (!connection) {
+      return res.status(404).json({ error: 'Broker connection not found or inactive' });
+    }
+
+    if (!connection.api_key || !connection.api_secret) {
+      return res.status(400).json({ 
+        error: 'Missing API credentials. Please update your connection settings.',
+        needsCredentials: true 
+      });
+    }
+
+    try {
+      const apiKey = decryptData(connection.api_key);
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const redirectUrl = `${baseUrl}/api/broker/auth/zerodha/callback?connection_id=${connectionId}&reconnect=true`;
+      const loginUrl = `https://kite.zerodha.com/connect/login?api_key=${apiKey}&v=3&redirect_url=${encodeURIComponent(redirectUrl)}`;
+      
+      res.json({ 
+        message: 'Please complete authentication to refresh your access token.',
+        loginUrl,
+        requiresAuth: true,
+        reconnect: true
+      });
+    } catch (error) {
+      return res.status(500).json({ error: 'Failed to generate refresh URL' });
+    }
     
   } catch (error) {
     logger.error('❌ Refresh token error:', error);
