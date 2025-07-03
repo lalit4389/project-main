@@ -12,7 +12,7 @@ const Overview: React.FC = () => {
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [brokerConnections, setBrokerConnections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshingToken, setRefreshingToken] = useState<number | null>(null);
+  const [reconnectingConnection, setReconnectingConnection] = useState<number | null>(null);
 
   useEffect(() => {
     fetchDashboardData();
@@ -53,16 +53,16 @@ const Overview: React.FC = () => {
     setTimeout(() => setWebhookCopied(null), 2000);
   };
 
-  const handleRefreshToken = async (connectionId: number) => {
-    setRefreshingToken(connectionId);
+  const handleReconnectNow = async (connectionId: number) => {
+    setReconnectingConnection(connectionId);
     try {
-      const response = await brokerAPI.refreshToken(connectionId);
+      const response = await brokerAPI.reconnect(connectionId);
       
       if (response.data.loginUrl) {
         // Open authentication window
         const authWindow = window.open(
           response.data.loginUrl,
-          'token-refresh',
+          'reconnect-auth',
           'width=600,height=700,scrollbars=yes,resizable=yes'
         );
 
@@ -88,16 +88,20 @@ const Overview: React.FC = () => {
         } else {
           toast.error('Failed to open authentication window. Please check your popup blocker.');
         }
+      } else {
+        // Direct reconnection successful
+        toast.success('Reconnected successfully using stored credentials!');
+        fetchDashboardData();
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to refresh token');
+      toast.error(error.response?.data?.error || 'Failed to reconnect');
       
       // If it's a 404 error, refresh dashboard data to update UI state
       if (error.response?.status === 404) {
         fetchDashboardData();
       }
     } finally {
-      setRefreshingToken(null);
+      setReconnectingConnection(null);
     }
   };
 
@@ -120,7 +124,7 @@ const Overview: React.FC = () => {
         color: 'text-red-600',
         bgColor: 'bg-red-100',
         icon: AlertTriangle,
-        action: 'refresh'
+        action: 'reconnect'
       };
     }
     
@@ -131,7 +135,7 @@ const Overview: React.FC = () => {
         color: 'text-amber-600',
         bgColor: 'bg-amber-100',
         icon: Clock,
-        action: 'refresh'
+        action: 'reconnect'
       };
     }
     
@@ -342,16 +346,16 @@ const Overview: React.FC = () => {
                       
                       {statusInfo.action && (
                         <motion.button
-                          onClick={() => statusInfo.action === 'refresh' ? handleRefreshToken(connection.id) : null}
-                          disabled={refreshingToken === connection.id}
+                          onClick={() => statusInfo.action === 'reconnect' ? handleReconnectNow(connection.id) : null}
+                          disabled={reconnectingConnection === connection.id}
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
                           className="text-xs bg-amber-500 text-white px-2 py-1 rounded hover:bg-amber-600 transition-colors disabled:opacity-50 shadow-3d"
                         >
-                          {refreshingToken === connection.id ? (
+                          {reconnectingConnection === connection.id ? (
                             <RefreshCw className="w-3 h-3 animate-spin" />
                           ) : (
-                            statusInfo.action === 'refresh' ? 'Refresh' : 'Auth'
+                            statusInfo.action === 'reconnect' ? 'Reconnect' : 'Auth'
                           )}
                         </motion.button>
                       )}

@@ -6,7 +6,7 @@ import { encryptData, decryptData, testEncryption } from '../utils/encryption.js
 import kiteService from '../services/kiteService.js';
 import createLogger from '../utils/logger.js';
 
-const logger = createLogger('WebhookHandler');
+const logger = createLogger('BrokerHandler');
 
 const router = express.Router();
 
@@ -166,63 +166,72 @@ router.post('/connect', authenticateToken, async (req, res) => {
   }
 });
 
-// Generate new access token for existing connectio
-router.post('/refresh-token/:connectionId', authenticateToken, async (req, res) => {
+// NEW: Reconnect using stored credentials - generates new access token directly
+router.post('/reconnect/:connectionId', authenticateToken, async (req, res) => {
   try {
     const { connectionId } = req.params;
-    const { userId } = req.user.id;
-    logger.info('🔄 Refreshing access token for connection:', userId);
+    
+    logger.info('🔄 Reconnecting using stored credentials for connection:', connectionId);
 
-    logger.info('🔄 Refreshing access token for connection:', connectionId);
-
-    // Get connection details
+    // Get connection details with encrypted credentials
     const connection = await db.getAsync(
-      'SELECT * FROM broker_connections WHERE id = ? AND user_id = ? ',
+      'SELECT * FROM broker_connections WHERE id = ? AND user_id = ? AND is_active = 1',
       [connectionId, req.user.id]
     );
 
-    logger.info(`✅ DB Result: ${JSON.stringify(connection, null, 2)}`);
-
     if (!connection) {
-      console.warn('❌ No active broker connection found for this user & ID');
-    } else {
-      console.log('✅ Broker connection data:', JSON.stringify(connection, null, 2));
+      return res.status(404).json({ error: 'Broker connection not found or inactive' });
     }
 
-
-    if (!connection) {
-      return res.status(404).json({ error: 'Broker connection not found' });
+    if (connection.broker_name.toLowerCase() !== 'zerodha') {
+      return res.status(400).json({ error: 'Reconnect with stored credentials is only supported for Zerodha currently' });
     }
 
-    if (connection.broker_name.toLowerCase() === 'zerodha') {
-      try {
-        logger.info('🔎 Broker type:', connection.broker_name);
-
-        const apiKey = decryptData(connection.api_key);
-        const baseUrl = `${req.protocol}://${req.get('host')}`;
-        const redirectUrl = `${baseUrl}/api/broker/auth/zerodha/callback?connection_id=${connectionId}&refresh=true`;
-        logger.info('🔁 Generated redirect URL:', redirectUrl);
-        // Generate Zerodha login URL for token refresh
-        const loginUrl = `https://kite.zerodha.com/connect/login?api_key=${apiKey}&v=3&redirect_url=${encodeURIComponent(redirectUrl)}`;
-        logger.info('🔐 Final Zerodha login URL:', loginUrl);
-        
-        logger.info('🔐 Generated Zerodha token refresh URL for connection:', connectionId);
-        
-        res.json({ 
-          message: 'Please complete authentication to refresh your access token.',
-          loginUrl,
-          requiresAuth: true
-        });
-      } catch (error) {
-        console.error('❌ Failed to generate token refresh URL:', error);
-        res.status(400).json({ error: 'Failed to generate token refresh URL' });
-      }
-    } else {
-      // For other brokers, implement their token refresh mechanism
-      res.status(400).json({ error: 'Token refresh not implemented for this broker' });
+    try {
+      // Decrypt stored credentials
+      const apiKey = decryptData(connection.api_key);
+      const apiSecret = decryptData(connection.api_secret);
+      
+      logger.info('🔐 Using stored credentials to generate new access token');
+      
+      // For Zerodha, we need to redirect user to login again to get a new request token
+      // This is because Zerodha's access tokens are session-based and require user login
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const redirectUrl = `${baseUrl}/api/broker/auth/zerodha/callback?connection_id=${connectionId}&reconnect=true`;
+      const loginUrl = `https://kite.zerodha.com/connect/login?api_key=${apiKey}&v=3&redirect_url=${encodeURIComponent(redirectUrl)}`;
+      
+      logger.info('🔐 Generated reconnection login URL for connection:', connectionId);
+      
+      res.json({ 
+        message: 'Please complete authentication to reconnect your account.',
+        loginUrl,
+        requiresAuth: true,
+        reconnect: true
+      });
+      
+    } catch (decryptError) {
+      logger.error('❌ Failed to decrypt stored credentials:', decryptError);
+      return res.status(500).json({ error: 'Failed to decrypt stored credentials. Please update your connection.' });
     }
+
   } catch (error) {
-    console.error('❌ Refresh token error:', error);
+    logger.error('❌ Reconnect error:', error);
+    res.status(500).json({ error: 'Failed to reconnect. Please try again.' });
+  }
+});
+
+// DEPRECATED: Old refresh token method (keeping for backward compatibility)
+router.post('/refresh-token/:connectionId', authenticateToken, async (req, res) => {
+  try {
+    const { connectionId } = req.params;
+    
+    logger.info('🔄 [DEPRECATED] Refresh token called, redirecting to reconnect');
+    
+    // Redirect to the new reconnect endpoint
+    return res.redirect(307, `/api/broker/reconnect/${connectionId}`);
+    
+  } catch (error) {
+    logger.error('❌ Refresh token error:', error);
     res.status(500).json({ error: 'Failed to refresh access token' });
   }
 });
@@ -230,9 +239,9 @@ router.post('/refresh-token/:connectionId', authenticateToken, async (req, res) 
 // Zerodha OAuth callback handler - This is the redirect URL endpoint
 router.get('/auth/zerodha/callback', async (req, res) => {
   try {
-    const { request_token, action, status, connection_id, refresh } = req.query;
+    const { request_token, action, status, connection_id, reconnect } = req.query;
 
-    console.log('📡 Zerodha callback received:', { request_token, action, status, connection_id, refresh });
+    console.log('📡 Zerodha callback received:', { request_token, action, status, connection_id, reconnect });
 
     // Check if authentication was successful
     if (action !== 'login' || status !== 'success' || !request_token) {
@@ -312,9 +321,12 @@ router.get('/auth/zerodha/callback', async (req, res) => {
         WHERE id = ?
       `, [encryptData(accessToken), encryptData(publicToken), expiresAt, connection_id]);
 
+      // Clear any cached KiteConnect instances to force refresh
+      kiteService.clearCachedInstance(connection_id);
+
       console.log('✅ Zerodha authentication completed for connection:', connection_id);
 
-      const actionText = refresh === 'true' ? 'Token Refreshed' : 'Authentication Successful';
+      const actionText = reconnect === 'true' ? 'Reconnection Successful' : 'Authentication Successful';
 
       // Return success page
       res.send(`
@@ -336,8 +348,8 @@ router.get('/auth/zerodha/callback', async (req, res) => {
               <div class="success-icon">✅</div>
               <h1 class="success-title">${actionText}!</h1>
               <p class="success-message">
-                Your Zerodha account has been successfully ${refresh === 'true' ? 'refreshed' : 'connected'} to AutoTraderHub.<br>
-                Access token expires: ${new Date(expiresAt * 1000).toLocaleString()}<br>
+                Your Zerodha account has been successfully ${reconnect === 'true' ? 'reconnected' : 'connected'} to AutoTraderHub.<br>
+                New access token expires: ${new Date(expiresAt * 1000).toLocaleString()}<br>
                 You can now close this window and return to the dashboard.
               </p>
               <button class="close-btn" onclick="window.close()">Close Window</button>
@@ -502,7 +514,7 @@ router.post('/test/:connectionId', authenticateToken, async (req, res) => {
 
     if (connection.access_token_expires_at && connection.access_token_expires_at < now) {
       return res.status(400).json({ 
-        error: 'Access token has expired. Please refresh your token.',
+        error: 'Access token has expired. Please reconnect your account.',
         tokenExpired: true 
       });
     }
@@ -523,7 +535,7 @@ router.post('/test/:connectionId', authenticateToken, async (req, res) => {
       // Check if it's a token-related error
       if (testError.message && testError.message.includes('api_key') || testError.message.includes('access_token')) {
         return res.status(401).json({ 
-          error: 'Invalid or expired credentials. Please refresh your access token.',
+          error: 'Invalid or expired credentials. Please reconnect your account.',
           tokenExpired: true,
           details: testError.message
         });

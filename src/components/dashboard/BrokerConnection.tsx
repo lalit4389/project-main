@@ -45,7 +45,7 @@ const BrokerConnection: React.FC = () => {
   const [testingConnection, setTestingConnection] = useState<number | null>(null);
   const [showConnectionForm, setShowConnectionForm] = useState(false);
   const [selectedBrokerForConnection, setSelectedBrokerForConnection] = useState<string>('');
-  const [authenticatingConnection, setAuthenticatingConnection] = useState<number | null>(null);
+  const [reconnectingConnection, setReconnectingConnection] = useState<number | null>(null);
   const [editingConnection, setEditingConnection] = useState<BrokerConnection | null>(null);
   const [showEditForm, setShowEditForm] = useState(false);
   const [deletingConnection, setDeletingConnection] = useState<number | null>(null);
@@ -193,7 +193,7 @@ const BrokerConnection: React.FC = () => {
   };
 
   const handleZerodhaAuth = (connectionId: number, loginUrl: string) => {
-    setAuthenticatingConnection(connectionId);
+    setReconnectingConnection(connectionId);
     
     const authWindow = window.open(
       loginUrl,
@@ -208,7 +208,7 @@ const BrokerConnection: React.FC = () => {
           setTimeout(() => {
             fetchConnections();
             setAuthenticationStep(null);
-            setAuthenticatingConnection(null);
+            setReconnectingConnection(null);
           }, 2000);
         }
       }, 1000);
@@ -217,29 +217,33 @@ const BrokerConnection: React.FC = () => {
         if (!authWindow.closed) {
           authWindow.close();
           clearInterval(checkClosed);
-          setAuthenticatingConnection(null);
+          setReconnectingConnection(null);
         }
       }, 300000);
     } else {
-      setAuthenticatingConnection(null);
+      setReconnectingConnection(null);
       toast.error('Failed to open authentication window. Please check your popup blocker.');
     }
   };
 
-  // Consolidated reconnect function
+  // NEW: Enhanced reconnect function using stored credentials
   const handleReconnectNow = async (connectionId: number) => {
     try {
-      setAuthenticatingConnection(connectionId);
-      const response = await brokerAPI.refreshToken(connectionId);
+      setReconnectingConnection(connectionId);
+      console.log('🔄 Reconnecting connection:', connectionId);
+      
+      const response = await brokerAPI.reconnect(connectionId);
       
       if (response.data.loginUrl) {
-        // For OAuth brokers like Zerodha
+        // For OAuth brokers like Zerodha that require user login
+        console.log('🔐 Opening authentication window for reconnection');
         handleZerodhaAuth(connectionId, response.data.loginUrl);
+        toast.success('Please complete authentication to reconnect your account.');
       } else {
-        // For non-OAuth brokers
-        toast.success('Reconnected successfully!');
+        // For non-OAuth brokers (direct token refresh)
+        toast.success('Reconnected successfully using stored credentials!');
         fetchConnections(); // Refresh the connections list
-        setAuthenticatingConnection(null);
+        setReconnectingConnection(null);
       }
     } catch (error: any) {
       console.error('Reconnection failed:', error);
@@ -250,10 +254,12 @@ const BrokerConnection: React.FC = () => {
         fetchConnections(); // Refresh to update UI
       } else if (error.response?.status === 401) {
         toast.error('Session expired. Please re-authenticate.');
+      } else if (error.response?.status === 500 && error.response?.data?.error?.includes('decrypt')) {
+        toast.error('Stored credentials are corrupted. Please update your connection settings.');
       } else {
-        toast.error(error.response?.data?.error || 'Failed to reconnect');
+        toast.error(error.response?.data?.error || 'Failed to reconnect. Please try again.');
       }
-      setAuthenticatingConnection(null);
+      setReconnectingConnection(null);
     }
   };
 
@@ -486,23 +492,23 @@ const BrokerConnection: React.FC = () => {
                         </span>
                       </div>
                       <p className="text-amber-600 text-xs mb-3">
-                        Your access token has expired or will expire soon. Reconnect to continue trading.
+                        Your access token has expired or will expire soon. Reconnect using your stored credentials.
                       </p>
                       <motion.button
                         onClick={() => handleReconnectNow(connection.id)}
-                        disabled={authenticatingConnection === connection.id}
+                        disabled={reconnectingConnection === connection.id}
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         className="w-full bg-gradient-to-r from-amber-500 to-amber-600 text-white py-2 px-3 rounded-lg hover:shadow-3d transition-all flex items-center justify-center space-x-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {authenticatingConnection === connection.id ? (
+                        {reconnectingConnection === connection.id ? (
                           <>
                             <RefreshCw className="w-4 h-4 animate-spin" />
                             <span>Reconnecting...</span>
                           </>
                         ) : (
                           <>
-                            <ExternalLink className="w-4 h-4" />
+                            <RefreshCw className="w-4 h-4" />
                             <span>Reconnect Now</span>
                           </>
                         )}
@@ -594,9 +600,6 @@ const BrokerConnection: React.FC = () => {
                           whileTap={{ scale: 0.98 }}
                           className="w-full bg-red-500 text-white py-2 rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center space-x-1 text-sm disabled:opacity-50 shadow-3d"
                         >
-                          
-                          
-                        
                           {deletingConnection === connection.id ? (
                             <RefreshCw className="w-4 h-4 animate-spin" />
                           ) : (
