@@ -111,6 +111,31 @@ export const brokerAPI = {
   syncHoldings: (connectionId) => api.post(`/broker/sync/holdings/${connectionId}`),
   getMarketData: (connectionId, instruments) => api.get(`/broker/market-data/${connectionId}`, { params: { instruments } }),
   testConnection: (connectionId) => api.post(`/broker/test/${connectionId}`),
+  
+  // NEW: Real-time positions API
+  getPositions: async (connectionId) => {
+    try {
+      console.log('📊 Fetching real-time positions for connection:', connectionId);
+      const response = await api.get(`/broker/positions/${connectionId}`);
+      console.log('✅ Positions fetched:', response.data);
+      return response;
+    } catch (error) {
+      console.error('❌ Failed to fetch positions:', error);
+      throw error;
+    }
+  },
+  
+  getHoldings: async (connectionId) => {
+    try {
+      console.log('📈 Fetching real-time holdings for connection:', connectionId);
+      const response = await api.get(`/broker/holdings/${connectionId}`);
+      console.log('✅ Holdings fetched:', response.data);
+      return response;
+    } catch (error) {
+      console.error('❌ Failed to fetch holdings:', error);
+      throw error;
+    }
+  },
 };
 
 // Enhanced Orders API with real-time capabilities

@@ -9,6 +9,7 @@ import Register from './components/auth/Register';
 import DashboardLayout from './components/dashboard/DashboardLayout';
 import Overview from './components/dashboard/Overview';
 import Orders from './components/dashboard/Orders';
+import Positions from './components/dashboard/Positions';
 import ForgotPassword from './components/auth/ForgotPassword';
 import VerifyOtpResetPassword from './components/auth/VerifyOtpResetPassword';
 import ResetPassword from './components/auth/ResetPassword';
@@ -53,6 +54,7 @@ function App() {
             >
               <Route index element={<Overview />} />
               <Route path="orders" element={<Orders />} />
+              <Route path="positions" element={<Positions />} />
               <Route path="pnl" element={<PnL />} />
               <Route path="brokers" element={<BrokerConnection />} />
             </Route>

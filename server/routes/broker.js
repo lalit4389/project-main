@@ -68,6 +68,196 @@ router.get('/connections/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// NEW: Get real-time positions from broker
+router.get('/positions/:connectionId', authenticateToken, async (req, res) => {
+  try {
+    const { connectionId } = req.params;
+    
+    logger.info(`Fetching real-time positions for connection ${connectionId}`);
+
+    // Verify connection belongs to user and is active
+    const connection = await db.getAsync(
+      'SELECT * FROM broker_connections WHERE id = ? AND user_id = ? AND is_active = 1',
+      [connectionId, req.user.id]
+    );
+
+    if (!connection) {
+      return res.status(404).json({ error: 'Broker connection not found or inactive' });
+    }
+
+    if (!connection.access_token) {
+      return res.status(400).json({ 
+        error: 'No access token found. Please authenticate first.',
+        needsAuth: true 
+      });
+    }
+
+    // Check if token is expired
+    const now = Math.floor(Date.now() / 1000);
+    if (connection.access_token_expires_at && connection.access_token_expires_at < now) {
+      return res.status(400).json({ 
+        error: 'Access token has expired. Please reconnect your account.',
+        tokenExpired: true 
+      });
+    }
+
+    let positions = [];
+    
+    try {
+      if (connection.broker_name.toLowerCase() === 'zerodha') {
+        const positionsData = await kiteService.getPositions(connectionId);
+        
+        // Format positions data
+        if (positionsData && positionsData.net) {
+          positions = positionsData.net
+            .filter(pos => Math.abs(pos.quantity) > 0) // Only non-zero positions
+            .map(pos => ({
+              symbol: pos.tradingsymbol,
+              exchange: pos.exchange,
+              quantity: pos.quantity,
+              average_price: pos.average_price,
+              current_price: pos.last_price,
+              pnl: pos.pnl,
+              pnl_percentage: pos.pnl ? (pos.pnl / (pos.average_price * Math.abs(pos.quantity))) * 100 : 0,
+              product: pos.product,
+              last_updated: new Date().toISOString()
+            }));
+        }
+      } else {
+        // For other brokers, implement their specific position fetching
+        logger.warn(`Real-time positions not implemented for ${connection.broker_name}`);
+        return res.status(400).json({ 
+          error: `Real-time positions not supported for ${connection.broker_name}` 
+        });
+      }
+
+      logger.info(`Retrieved ${positions.length} positions for connection ${connectionId}`);
+      
+      res.json({
+        positions,
+        broker_name: connection.broker_name,
+        last_updated: new Date().toISOString(),
+        connection_id: connectionId
+      });
+
+    } catch (brokerError) {
+      logger.error('Failed to fetch positions from broker:', brokerError);
+      
+      if (brokerError.message && brokerError.message.includes('api_key') || brokerError.message.includes('access_token')) {
+        return res.status(401).json({ 
+          error: 'Invalid or expired credentials. Please reconnect your account.',
+          tokenExpired: true,
+          details: brokerError.message
+        });
+      }
+      
+      return res.status(500).json({ 
+        error: 'Failed to fetch positions from broker',
+        details: brokerError.message
+      });
+    }
+
+  } catch (error) {
+    logger.error('Get positions error:', error);
+    res.status(500).json({ error: 'Failed to fetch positions' });
+  }
+});
+
+// NEW: Get real-time holdings from broker
+router.get('/holdings/:connectionId', authenticateToken, async (req, res) => {
+  try {
+    const { connectionId } = req.params;
+    
+    logger.info(`Fetching real-time holdings for connection ${connectionId}`);
+
+    // Verify connection belongs to user and is active
+    const connection = await db.getAsync(
+      'SELECT * FROM broker_connections WHERE id = ? AND user_id = ? AND is_active = 1',
+      [connectionId, req.user.id]
+    );
+
+    if (!connection) {
+      return res.status(404).json({ error: 'Broker connection not found or inactive' });
+    }
+
+    if (!connection.access_token) {
+      return res.status(400).json({ 
+        error: 'No access token found. Please authenticate first.',
+        needsAuth: true 
+      });
+    }
+
+    // Check if token is expired
+    const now = Math.floor(Date.now() / 1000);
+    if (connection.access_token_expires_at && connection.access_token_expires_at < now) {
+      return res.status(400).json({ 
+        error: 'Access token has expired. Please reconnect your account.',
+        tokenExpired: true 
+      });
+    }
+
+    let holdings = [];
+    
+    try {
+      if (connection.broker_name.toLowerCase() === 'zerodha') {
+        const holdingsData = await kiteService.getHoldings(connectionId);
+        
+        // Format holdings data
+        if (holdingsData && Array.isArray(holdingsData)) {
+          holdings = holdingsData
+            .filter(holding => holding.quantity > 0) // Only positive holdings
+            .map(holding => ({
+              symbol: holding.tradingsymbol,
+              exchange: holding.exchange,
+              quantity: holding.quantity,
+              average_price: holding.average_price,
+              current_price: holding.last_price,
+              pnl: holding.pnl,
+              pnl_percentage: holding.pnl ? (holding.pnl / (holding.average_price * holding.quantity)) * 100 : 0,
+              product: 'CNC', // Holdings are typically CNC
+              last_updated: new Date().toISOString()
+            }));
+        }
+      } else {
+        // For other brokers, implement their specific holdings fetching
+        logger.warn(`Real-time holdings not implemented for ${connection.broker_name}`);
+        return res.status(400).json({ 
+          error: `Real-time holdings not supported for ${connection.broker_name}` 
+        });
+      }
+
+      logger.info(`Retrieved ${holdings.length} holdings for connection ${connectionId}`);
+      
+      res.json({
+        holdings,
+        broker_name: connection.broker_name,
+        last_updated: new Date().toISOString(),
+        connection_id: connectionId
+      });
+
+    } catch (brokerError) {
+      logger.error('Failed to fetch holdings from broker:', brokerError);
+      
+      if (brokerError.message && brokerError.message.includes('api_key') || brokerError.message.includes('access_token')) {
+        return res.status(401).json({ 
+          error: 'Invalid or expired credentials. Please reconnect your account.',
+          tokenExpired: true,
+          details: brokerError.message
+        });
+      }
+      
+      return res.status(500).json({ 
+        error: 'Failed to fetch holdings from broker',
+        details: brokerError.message
+      });
+    }
+
+  } catch (error) {
+    logger.error('Get holdings error:', error);
+    res.status(500).json({ error: 'Failed to fetch holdings' });
+  }
+});
+
 // Connect broker - Step 1: Store credentials and generate login URL
 router.post('/connect', authenticateToken, async (req, res) => {
   try {

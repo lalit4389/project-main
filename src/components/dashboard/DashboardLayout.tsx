@@ -8,7 +8,8 @@ import {
   Link as LinkIcon, 
   Settings,
   Menu,
-  X
+  X,
+  Activity
 } from 'lucide-react';
 
 const DashboardLayout: React.FC = () => {
@@ -18,6 +19,7 @@ const DashboardLayout: React.FC = () => {
   const navigation = [
     { name: 'Overview', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Orders', href: '/dashboard/orders', icon: FileText },
+    { name: 'Positions', href: '/dashboard/positions', icon: Activity },
     { name: 'P&L Analytics', href: '/dashboard/pnl', icon: BarChart3 },
     { name: 'Broker Connection', href: '/dashboard/brokers', icon: LinkIcon },
     { name: 'Settings', href: '/dashboard/settings', icon: Settings },
