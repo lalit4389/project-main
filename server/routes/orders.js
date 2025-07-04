@@ -2,8 +2,11 @@ import express from 'express';
 import { db } from '../database/init.js';
 import { authenticateToken } from '../middleware/auth.js';
 import kiteService from '../services/kiteService.js';
+import orderStatusService from '../services/orderStatusService.js';
+import { createLogger } from '../utils/logger.js';
 
 const router = express.Router();
+const logger = createLogger('ORDERS_API');
 
 // Get orders with enhanced filtering and real-time updates
 router.get('/', authenticateToken, async (req, res) => {
@@ -115,11 +118,13 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
-// Get specific order details with real-time broker data
+// Get specific order details with real-time broker data and auto-polling
 router.get('/:orderId', authenticateToken, async (req, res) => {
   try {
     const { orderId } = req.params;
-    const { sync = false } = req.query;
+    const { sync = false, startPolling = false } = req.query;
+
+    logger.info(`Getting order details for order ${orderId}`, { sync, startPolling });
 
     // Get order from database
     const order = await db.getAsync(`
@@ -127,7 +132,8 @@ router.get('/:orderId', authenticateToken, async (req, res) => {
         o.*,
         bc.broker_name,
         bc.webhook_url,
-        bc.is_active as broker_active
+        bc.is_active as broker_active,
+        bc.is_authenticated as broker_authenticated
       FROM orders o
       LEFT JOIN broker_connections bc ON o.broker_connection_id = bc.id
       WHERE o.id = ? AND o.user_id = ?
@@ -138,21 +144,24 @@ router.get('/:orderId', authenticateToken, async (req, res) => {
     }
 
     let brokerOrderData = null;
+    let pollingStarted = false;
 
     // If sync is requested and we have a broker order ID, fetch from broker
     if (sync === 'true' && order.broker_order_id && order.broker_connection_id) {
       try {
-        if (order.broker_name === 'zerodha') {
+        if (order.broker_name === 'zerodha' && order.broker_authenticated) {
           brokerOrderData = await kiteService.getOrderStatus(order.broker_connection_id, order.broker_order_id);
           
           // Update order status if different from broker
           if (brokerOrderData && brokerOrderData.status !== order.status) {
+            const newStatus = orderStatusService.mapBrokerStatus(brokerOrderData.status);
+            
             await db.runAsync(`
               UPDATE orders 
               SET status = ?, executed_price = ?, executed_quantity = ?, status_message = ?, updated_at = CURRENT_TIMESTAMP
               WHERE id = ?
             `, [
-              brokerOrderData.status,
+              newStatus,
               brokerOrderData.average_price || brokerOrderData.price,
               brokerOrderData.filled_quantity || brokerOrderData.quantity,
               JSON.stringify(brokerOrderData),
@@ -160,15 +169,36 @@ router.get('/:orderId', authenticateToken, async (req, res) => {
             ]);
 
             // Update the order object with new data
-            order.status = brokerOrderData.status;
+            order.status = newStatus;
             order.executed_price = brokerOrderData.average_price || brokerOrderData.price;
             order.executed_quantity = brokerOrderData.filled_quantity || brokerOrderData.quantity;
             order.status_message = JSON.stringify(brokerOrderData);
+
+            logger.info(`Order ${orderId} status updated from broker: ${newStatus}`);
           }
         }
       } catch (brokerError) {
-        console.error('Failed to fetch order from broker:', brokerError);
+        logger.error('Failed to fetch order from broker:', brokerError);
         // Continue with database data
+      }
+    }
+
+    // Start real-time polling if requested and order is not in final state
+    if (startPolling === 'true' && order.broker_order_id && order.broker_connection_id) {
+      if (!orderStatusService.isFinalStatus(order.status)) {
+        try {
+          await orderStatusService.startOrderStatusPolling(
+            order.id,
+            order.broker_connection_id,
+            order.broker_order_id
+          );
+          pollingStarted = true;
+          logger.info(`Started real-time polling for order ${orderId}`);
+        } catch (pollingError) {
+          logger.error('Failed to start order polling:', pollingError);
+        }
+      } else {
+        logger.info(`Order ${orderId} is in final state, polling not needed`);
       }
     }
 
@@ -177,12 +207,114 @@ router.get('/:orderId', authenticateToken, async (req, res) => {
         ...order,
         webhook_data: order.webhook_data ? JSON.parse(order.webhook_data) : null,
         status_message: order.status_message ? JSON.parse(order.status_message) : null,
-        broker_data: brokerOrderData
+        broker_data: brokerOrderData,
+        polling_started: pollingStarted,
+        is_final_status: orderStatusService.isFinalStatus(order.status)
       }
     });
   } catch (error) {
-    console.error('Get order details error:', error);
+    logger.error('Get order details error:', error);
     res.status(500).json({ error: 'Failed to fetch order details' });
+  }
+});
+
+// NEW: Start real-time polling for a specific order
+router.post('/:orderId/start-polling', authenticateToken, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    // Get order details
+    const order = await db.getAsync(`
+      SELECT o.*, bc.is_authenticated 
+      FROM orders o
+      LEFT JOIN broker_connections bc ON o.broker_connection_id = bc.id
+      WHERE o.id = ? AND o.user_id = ?
+    `, [orderId, req.user.id]);
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    if (!order.broker_order_id || !order.broker_connection_id) {
+      return res.status(400).json({ error: 'Order missing broker information' });
+    }
+
+    if (!order.is_authenticated) {
+      return res.status(400).json({ error: 'Broker connection not authenticated' });
+    }
+
+    if (orderStatusService.isFinalStatus(order.status)) {
+      return res.status(400).json({ 
+        error: 'Order is already in final state',
+        status: order.status 
+      });
+    }
+
+    // Start polling
+    await orderStatusService.startOrderStatusPolling(
+      order.id,
+      order.broker_connection_id,
+      order.broker_order_id
+    );
+
+    logger.info(`Started real-time polling for order ${orderId} via API`);
+
+    res.json({
+      message: 'Real-time polling started for order',
+      orderId: orderId,
+      pollingStatus: orderStatusService.getPollingStatus()
+    });
+  } catch (error) {
+    logger.error('Start polling error:', error);
+    res.status(500).json({ error: 'Failed to start order polling' });
+  }
+});
+
+// NEW: Stop real-time polling for a specific order
+router.post('/:orderId/stop-polling', authenticateToken, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    // Get order details to construct polling key
+    const order = await db.getAsync(
+      'SELECT broker_order_id FROM orders WHERE id = ? AND user_id = ?',
+      [orderId, req.user.id]
+    );
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    if (order.broker_order_id) {
+      const pollingKey = `${orderId}-${order.broker_order_id}`;
+      orderStatusService.stopPolling(pollingKey);
+      
+      logger.info(`Stopped real-time polling for order ${orderId} via API`);
+      
+      res.json({
+        message: 'Real-time polling stopped for order',
+        orderId: orderId
+      });
+    } else {
+      res.status(400).json({ error: 'Order has no broker order ID' });
+    }
+  } catch (error) {
+    logger.error('Stop polling error:', error);
+    res.status(500).json({ error: 'Failed to stop order polling' });
+  }
+});
+
+// NEW: Get polling status for debugging
+router.get('/polling/status', authenticateToken, async (req, res) => {
+  try {
+    const status = orderStatusService.getPollingStatus();
+    res.json({
+      message: 'Current polling status',
+      ...status
+    });
+  } catch (error) {
+    logger.error('Get polling status error:', error);
+    res.status(500).json({ error: 'Failed to get polling status' });
   }
 });
 

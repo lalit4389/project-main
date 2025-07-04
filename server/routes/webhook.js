@@ -1,6 +1,7 @@
 import express from 'express';
 import { db } from '../database/init.js';
 import kiteService from '../services/kiteService.js';
+import orderStatusService from '../services/orderStatusService.js';
 import createLogger from '../utils/logger.js';
 
 const router = express.Router();
@@ -151,6 +152,20 @@ router.post('/:userId/:webhookId', async (req, res) => {
         [brokerResponse.order_id, brokerResponse.data.status || 'OPEN', JSON.stringify(brokerResponse.data), orderId]
       );
 
+      // Start real-time polling for the order if it's not in final state
+      if (brokerResponse.order_id && !orderStatusService.isFinalStatus(brokerResponse.data.status || 'OPEN')) {
+        try {
+          await orderStatusService.startOrderStatusPolling(
+            orderId,
+            brokerConnection.id,
+            brokerResponse.order_id
+          );
+          debugLogs.push('🔄 Started real-time order status polling');
+        } catch (pollingError) {
+          debugLogs.push(`⚠️ Failed to start order polling: ${pollingError.message}`);
+        }
+      }
+
       if (brokerResponse.data.status === 'COMPLETE') {
         try {
           await kiteService.syncPositions(brokerConnection.id);
@@ -174,6 +189,7 @@ router.post('/:userId/:webhookId', async (req, res) => {
         brokerOrderId: brokerResponse.order_id,
         status: brokerResponse.data.status,
         processingTime: Date.now() - startTime,
+        pollingStarted: !orderStatusService.isFinalStatus(brokerResponse.data.status || 'OPEN'),
         debugLogs
       });
 

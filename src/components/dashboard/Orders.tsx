@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, Filter, Download, Calendar, TrendingUp, TrendingDown, 
   RefreshCw, Eye, ExternalLink, Clock, CheckCircle, XCircle,
-  AlertCircle, Loader, MoreVertical, Edit3
+  AlertCircle, Loader, MoreVertical, Edit3, Play, Square, Activity
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ordersAPI, brokerAPI } from '../../services/api';
@@ -26,6 +26,9 @@ interface Order {
   broker_order_id: string;
   webhook_data: any;
   status_message: any;
+  broker_data?: any;
+  polling_started?: boolean;
+  is_final_status?: boolean;
 }
 
 const Orders: React.FC = () => {
@@ -40,6 +43,8 @@ const Orders: React.FC = () => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showOrderDetails, setShowOrderDetails] = useState(false);
   const [syncingBroker, setSyncingBroker] = useState<number | null>(null);
+  const [pollingOrders, setPollingOrders] = useState<Set<number>>(new Set());
+  const [orderPollingStatus, setOrderPollingStatus] = useState<{[key: number]: boolean}>({});
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 20,
@@ -54,6 +59,17 @@ const Orders: React.FC = () => {
   useEffect(() => {
     fetchOrders();
   }, [pagination.page, statusFilter, typeFilter, brokerFilter, searchTerm]);
+
+  // Auto-refresh orders every 30 seconds when there are active orders
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (orders.some(order => !isFinalStatus(order.status))) {
+        fetchOrders(true); // Silent refresh
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [orders]);
 
   const fetchInitialData = async () => {
     try {
@@ -78,10 +94,12 @@ const Orders: React.FC = () => {
     }
   };
 
-  const fetchOrders = async () => {
-    if (loading) return; // Don't fetch if initial load is in progress
+  const fetchOrders = async (silent = false) => {
+    if (loading && !silent) return; // Don't fetch if initial load is in progress
 
     try {
+      if (!silent) setRefreshing(true);
+
       const params: any = {
         page: pagination.page,
         limit: pagination.limit
@@ -97,7 +115,9 @@ const Orders: React.FC = () => {
       setPagination(response.data.pagination);
     } catch (error) {
       console.error('Failed to fetch orders:', error);
-      toast.error('Failed to fetch orders');
+      if (!silent) toast.error('Failed to fetch orders');
+    } finally {
+      if (!silent) setRefreshing(false);
     }
   };
 
@@ -134,6 +154,63 @@ const Orders: React.FC = () => {
       console.error('Failed to fetch order details:', error);
       toast.error('Failed to fetch order details');
     }
+  };
+
+  const startOrderPolling = async (orderId: number) => {
+    try {
+      setPollingOrders(prev => new Set([...prev, orderId]));
+      
+      const response = await ordersAPI.startOrderPolling(orderId);
+      
+      setOrderPollingStatus(prev => ({
+        ...prev,
+        [orderId]: true
+      }));
+      
+      toast.success('Real-time monitoring started for order');
+      
+      // Refresh order details to show updated status
+      setTimeout(() => {
+        fetchOrders(true);
+      }, 2000);
+      
+    } catch (error: any) {
+      console.error('Failed to start order polling:', error);
+      toast.error(error.response?.data?.error || 'Failed to start real-time monitoring');
+      setPollingOrders(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(orderId);
+        return newSet;
+      });
+    }
+  };
+
+  const stopOrderPolling = async (orderId: number) => {
+    try {
+      await ordersAPI.stopOrderPolling(orderId);
+      
+      setPollingOrders(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(orderId);
+        return newSet;
+      });
+      
+      setOrderPollingStatus(prev => ({
+        ...prev,
+        [orderId]: false
+      }));
+      
+      toast.success('Real-time monitoring stopped for order');
+      
+    } catch (error: any) {
+      console.error('Failed to stop order polling:', error);
+      toast.error(error.response?.data?.error || 'Failed to stop real-time monitoring');
+    }
+  };
+
+  const isFinalStatus = (status: string) => {
+    const finalStatuses = ['COMPLETE', 'CANCELLED', 'REJECTED'];
+    return finalStatuses.includes(status?.toUpperCase());
   };
 
   const getStatusColor = (status: string) => {
@@ -202,7 +279,7 @@ const Orders: React.FC = () => {
       >
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-white">Order Management</h1>
-          <p className="text-olive-200/70 mt-1">Track and manage all your automated and manual trades</p>
+          <p className="text-olive-200/70 mt-1">Track and manage all your automated and manual trades with real-time updates</p>
         </div>
         <div className="flex items-center space-x-3 mt-4 sm:mt-0">
           <motion.button 
@@ -344,6 +421,12 @@ const Orders: React.FC = () => {
                       {order.broker_order_id && (
                         <span className="text-xs text-olive-200/70">{order.broker_order_id}</span>
                       )}
+                      {orderPollingStatus[order.id] && (
+                        <div className="flex items-center space-x-1 mt-1">
+                          <Activity className="w-3 h-3 text-green-400 animate-pulse" />
+                          <span className="text-xs text-green-400">Live</span>
+                        </div>
+                      )}
                     </div>
                   </td>
                   <td className="py-4 px-6 font-medium text-white">{order.symbol}</td>
@@ -414,6 +497,38 @@ const Orders: React.FC = () => {
                       >
                         <Eye className="w-4 h-4" />
                       </motion.button>
+                      
+                      {/* Real-time monitoring controls */}
+                      {order.broker_order_id && !isFinalStatus(order.status) && (
+                        <>
+                          {orderPollingStatus[order.id] ? (
+                            <motion.button
+                              onClick={() => stopOrderPolling(order.id)}
+                              whileHover={{ scale: 1.1 }}
+                              whileTap={{ scale: 0.9 }}
+                              className="text-red-400 hover:text-red-300 transition-colors"
+                              title="Stop Real-time Monitoring"
+                            >
+                              <Square className="w-4 h-4" />
+                            </motion.button>
+                          ) : (
+                            <motion.button
+                              onClick={() => startOrderPolling(order.id)}
+                              disabled={pollingOrders.has(order.id)}
+                              whileHover={{ scale: 1.1 }}
+                              whileTap={{ scale: 0.9 }}
+                              className="text-green-400 hover:text-green-300 transition-colors disabled:opacity-50"
+                              title="Start Real-time Monitoring"
+                            >
+                              {pollingOrders.has(order.id) ? (
+                                <Loader className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Play className="w-4 h-4" />
+                              )}
+                            </motion.button>
+                          )}
+                        </>
+                      )}
                       
                       {order.broker_order_id && (
                         <motion.button
@@ -491,7 +606,15 @@ const Orders: React.FC = () => {
               className="bg-dark-800 rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-olive-500/20"
             >
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-white">Order Details</h3>
+                <div className="flex items-center space-x-3">
+                  <h3 className="text-xl font-bold text-white">Order Details</h3>
+                  {selectedOrder.polling_started && (
+                    <div className="flex items-center space-x-1 px-2 py-1 bg-green-800/20 rounded-full">
+                      <Activity className="w-3 h-3 text-green-400 animate-pulse" />
+                      <span className="text-xs text-green-400">Live Monitoring</span>
+                    </div>
+                  )}
+                </div>
                 <motion.button
                   onClick={() => setShowOrderDetails(false)}
                   whileHover={{ scale: 1.1 }}
@@ -576,6 +699,49 @@ const Orders: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Real-time Monitoring Controls */}
+                {selectedOrder.broker_order_id && !selectedOrder.is_final_status && (
+                  <div className="bg-dark-900/50 rounded-xl p-4">
+                    <h4 className="font-semibold text-olive-300 mb-3">Real-time Monitoring</h4>
+                    <div className="flex items-center space-x-4">
+                      {orderPollingStatus[selectedOrder.id] ? (
+                        <motion.button
+                          onClick={() => stopOrderPolling(selectedOrder.id)}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          className="flex items-center space-x-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+                        >
+                          <Square className="w-4 h-4" />
+                          <span>Stop Monitoring</span>
+                        </motion.button>
+                      ) : (
+                        <motion.button
+                          onClick={() => startOrderPolling(selectedOrder.id)}
+                          disabled={pollingOrders.has(selectedOrder.id)}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                        >
+                          {pollingOrders.has(selectedOrder.id) ? (
+                            <>
+                              <Loader className="w-4 h-4 animate-spin" />
+                              <span>Starting...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Play className="w-4 h-4" />
+                              <span>Start Monitoring</span>
+                            </>
+                          )}
+                        </motion.button>
+                      )}
+                      <p className="text-olive-200/70 text-sm">
+                        Monitor order status changes in real-time from your broker
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Webhook Data */}
                 {selectedOrder.webhook_data && (
                   <div className="bg-dark-900/50 rounded-xl p-4">
@@ -595,6 +761,16 @@ const Orders: React.FC = () => {
                         ? selectedOrder.status_message 
                         : JSON.stringify(selectedOrder.status_message, null, 2)
                       }
+                    </pre>
+                  </div>
+                )}
+
+                {/* Live Broker Data */}
+                {selectedOrder.broker_data && (
+                  <div className="bg-dark-900/50 rounded-xl p-4">
+                    <h4 className="font-semibold text-olive-300 mb-3">Live Broker Data</h4>
+                    <pre className="text-xs text-olive-200 bg-dark-800/50 p-3 rounded-lg overflow-x-auto">
+                      {JSON.stringify(selectedOrder.broker_data, null, 2)}
                     </pre>
                   </div>
                 )}

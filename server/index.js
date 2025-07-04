@@ -9,6 +9,7 @@ import orderRoutes from './routes/orders.js';
 import webhookRoutes from './routes/webhook.js';
 import { initDatabase } from './database/init.js';
 import { createLogger, requestLoggingMiddleware } from './utils/logger.js';
+import orderStatusService from './services/orderStatusService.js';
 
 dotenv.config();
 
@@ -93,6 +94,18 @@ try {
   process.exit(1);
 }
 
+// Initialize order status service
+try {
+  logger.info('Starting order status service...');
+  await orderStatusService.startPollingForOpenOrders();
+  logger.info('Order status service initialized successfully');
+} catch (error) {
+  logger.error('Order status service initialization failed', error, {
+    component: 'order_status_service'
+  });
+  // Don't exit, service can still function without real-time updates
+}
+
 // Routes with enhanced logging
 app.use('/api/auth', (req, res, next) => {
   logger.debug('Auth route accessed', {
@@ -136,6 +149,7 @@ app.use('/api/webhook', (req, res, next) => {
 
 // Health check with detailed information
 app.get('/api/health', (req, res) => {
+  const pollingStatus = orderStatusService.getPollingStatus();
   const healthInfo = {
     status: 'OK',
     timestamp: new Date().toISOString(),
@@ -143,7 +157,11 @@ app.get('/api/health', (req, res) => {
     env: process.env.NODE_ENV || 'development',
     uptime: process.uptime(),
     memory: process.memoryUsage(),
-    version: process.version
+    version: process.version,
+    orderPolling: {
+      active: pollingStatus.pollingCount,
+      orders: pollingStatus.activePolling
+    }
   };
   
   logger.info('Health check requested', {
@@ -202,25 +220,31 @@ app.use('*', (req, res) => {
       'POST /api/auth/register',
       'POST /api/auth/login',
       'GET /api/broker/connections',
-      'POST /api/broker/connect'
+      'POST /api/broker/connect',
+      'GET /api/orders',
+      'GET /api/orders/:orderId',
+      'POST /api/orders/:orderId/start-polling'
     ]
   });
 });
 
-// Graceful shutdown handling with logging
+// Graceful shutdown handling with logging and cleanup
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down gracefully', { signal: 'SIGTERM' });
+  orderStatusService.stopAllPolling();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
   logger.info('SIGINT received, shutting down gracefully', { signal: 'SIGINT' });
+  orderStatusService.stopAllPolling();
   process.exit(0);
 });
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
   logger.error('Uncaught Exception', error, { fatal: true });
+  orderStatusService.stopAllPolling();
   process.exit(1);
 });
 
@@ -230,6 +254,7 @@ process.on('unhandledRejection', (reason, promise) => {
     fatal: true,
     promise: promise.toString()
   });
+  orderStatusService.stopAllPolling();
   process.exit(1);
 });
 
@@ -254,6 +279,7 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`📊 AutoTraderHub API is ready`);
   console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🕒 Started at: ${new Date().toISOString()}`);
+  console.log(`🔄 Order Status Service: Active`);
   console.log('🚀 ================================');
 });
 
@@ -270,6 +296,7 @@ server.on('error', (error) => {
       suggestion: 'Use a different port or stop the existing server'
     });
   }
+  orderStatusService.stopAllPolling();
   process.exit(1);
 });
 

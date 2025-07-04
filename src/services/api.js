@@ -121,6 +121,33 @@ export const ordersAPI = {
   updateOrderStatus: (orderId, data) => api.patch(`/orders/${orderId}/status`, data),
   getPositions: (params) => api.get('/orders/positions', { params }),
   getPnL: (params) => api.get('/orders/pnl', { params }),
+  
+  // NEW: Real-time order monitoring
+  startOrderPolling: async (orderId) => {
+    try {
+      console.log('🔄 Starting real-time polling for order:', orderId);
+      const response = await api.post(`/orders/${orderId}/start-polling`);
+      console.log('✅ Order polling started:', response.data);
+      return response;
+    } catch (error) {
+      console.error('❌ Failed to start order polling:', error);
+      throw error;
+    }
+  },
+  
+  stopOrderPolling: async (orderId) => {
+    try {
+      console.log('⏹️ Stopping real-time polling for order:', orderId);
+      const response = await api.post(`/orders/${orderId}/stop-polling`);
+      console.log('✅ Order polling stopped:', response.data);
+      return response;
+    } catch (error) {
+      console.error('❌ Failed to stop order polling:', error);
+      throw error;
+    }
+  },
+  
+  getPollingStatus: () => api.get('/orders/polling/status'),
 };
 
 // Webhook API
