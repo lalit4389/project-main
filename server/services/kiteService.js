@@ -243,14 +243,23 @@ class KiteService {
     }
   }
 
-  // Get positions
+  // Get positions with enhanced error handling and data formatting
   async getPositions(brokerConnectionId) {
     try {
       console.log('🔍 Getting positions for broker connection:', brokerConnectionId);
       const kc = await this.getKiteInstance(brokerConnectionId);
       const positions = await kc.getPositions();
-      console.log('✅ Positions retrieved:', positions.net?.length || 0, 'positions');
-      return positions;
+      console.log('✅ Raw positions data:', JSON.stringify(positions, null, 2));
+      
+      // Return both net and day positions for flexibility
+      const result = {
+        net: positions.net || [],
+        day: positions.day || [],
+        raw: positions
+      };
+      
+      console.log('✅ Formatted positions:', result.net?.length || 0, 'net positions');
+      return result;
     } catch (error) {
       console.error('❌ Failed to get positions:', error);
       logger.error('Failed to get positions:', error);
@@ -258,7 +267,7 @@ class KiteService {
     }
   }
 
-  // Get holdings
+  // Get holdings with enhanced error handling
   async getHoldings(brokerConnectionId) {
     try {
       console.log('🔍 Getting holdings for broker connection:', brokerConnectionId);
@@ -273,7 +282,7 @@ class KiteService {
     }
   }
 
-  // Get orders
+  // Get orders with enhanced error handling
   async getOrders(brokerConnectionId) {
     try {
       console.log('🔍 Getting orders for broker connection:', brokerConnectionId);
@@ -288,14 +297,40 @@ class KiteService {
     }
   }
 
-  // Get order status
+  // Get order status with enhanced error handling and retry logic
   async getOrderStatus(brokerConnectionId, orderId) {
     try {
       console.log('🔍 Getting order status for:', { brokerConnectionId, orderId });
       const kc = await this.getKiteInstance(brokerConnectionId);
-      const orderHistory = await kc.getOrderHistory(orderId);
-      console.log('✅ Order status retrieved');
-      return orderHistory[orderHistory.length - 1]; // Return latest status
+      
+      // First try to get order history
+      let orderHistory;
+      try {
+        orderHistory = await kc.getOrderHistory(orderId);
+        console.log('✅ Order history retrieved:', JSON.stringify(orderHistory, null, 2));
+      } catch (historyError) {
+        console.warn('⚠️ Failed to get order history, trying orders list:', historyError.message);
+        
+        // Fallback: get all orders and find the specific one
+        const allOrders = await kc.getOrders();
+        const matchingOrder = allOrders.find(order => order.order_id === orderId);
+        
+        if (matchingOrder) {
+          orderHistory = [matchingOrder];
+          console.log('✅ Order found in orders list:', JSON.stringify(matchingOrder, null, 2));
+        } else {
+          throw new Error(`Order ${orderId} not found in broker account`);
+        }
+      }
+      
+      if (!orderHistory || orderHistory.length === 0) {
+        throw new Error(`No order history found for order ${orderId}`);
+      }
+      
+      // Return latest status (last item in history)
+      const latestStatus = orderHistory[orderHistory.length - 1];
+      console.log('✅ Latest order status:', JSON.stringify(latestStatus, null, 2));
+      return latestStatus;
     } catch (error) {
       console.error('❌ Failed to get order status:', error);
       logger.error('Failed to get order status:', error);

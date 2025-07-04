@@ -147,9 +147,23 @@ const Orders: React.FC = () => {
       setSelectedOrder(order);
       setShowOrderDetails(true);
 
-      // Fetch detailed order information with broker sync
-      const response = await ordersAPI.getOrderDetails(order.id, { sync: true });
-      setSelectedOrder(response.data.order);
+      // Fetch detailed order information with broker sync and start polling if needed
+      const response = await ordersAPI.getOrderDetails(order.id, { 
+        sync: true, 
+        startPolling: !isFinalStatus(order.status) 
+      });
+      
+      const updatedOrder = response.data.order;
+      setSelectedOrder(updatedOrder);
+      
+      // Update polling status if polling was started
+      if (updatedOrder.polling_started) {
+        setOrderPollingStatus(prev => ({
+          ...prev,
+          [order.id]: true
+        }));
+      }
+      
     } catch (error) {
       console.error('Failed to fetch order details:', error);
       toast.error('Failed to fetch order details');
