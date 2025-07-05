@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, TrendingUp, AlertCircle } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, TrendingUp, AlertCircle, Shield, Zap } from 'lucide-react';
 import { authAPI } from '../../services/api';
 import toast, { Toaster } from 'react-hot-toast';
 
@@ -47,42 +47,97 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-dark-950 via-olive-950 to-dark-900 flex items-center justify-center px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-cream-50 via-beige-100 to-sand-200 flex items-center justify-center px-4 sm:px-6 lg:px-8 relative overflow-hidden">
       <Toaster position="top-right" />
       
-      {/* Enhanced 3D Background */}
+      {/* Enhanced 3D Background Elements */}
       <div className="absolute inset-0 perspective-2000">
+        {/* Floating 3D Geometric Shapes */}
         <motion.div
           animate={{
-            rotateX: [0, 360],
-            rotateY: [0, 180],
+            y: [0, -30, 0],
+            rotateX: [0, 360, 0],
+            rotateY: [0, 180, 0],
             scale: [1, 1.1, 1],
           }}
           transition={{
-            duration: 20,
+            duration: 15,
             repeat: Infinity,
-            ease: "linear"
+            ease: "easeInOut"
           }}
-          className="absolute top-1/4 left-1/4 w-72 h-72 bg-olive-500/10 rounded-full blur-3xl"
+          className="absolute top-20 left-20 w-24 h-24 bg-gradient-to-r from-amber-500/20 to-bronze-600/20 rounded-2xl backdrop-blur-sm"
+          style={{ 
+            transform: 'perspective(1000px) rotateX(45deg) rotateY(45deg)',
+            transformStyle: 'preserve-3d',
+            boxShadow: '0 0 40px rgba(218, 143, 74, 0.3)'
+          }}
         />
+        
         <motion.div
           animate={{
-            rotateY: [0, -360],
-            rotateZ: [0, 180],
+            y: [0, 25, 0],
+            rotateX: [0, -180, 0],
+            rotateZ: [0, 90, 0],
             scale: [1, 0.8, 1],
           }}
           transition={{
-            duration: 25,
+            duration: 18,
             repeat: Infinity,
-            ease: "linear",
-            delay: 5
+            ease: "easeInOut",
+            delay: 3
           }}
-          className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-dark-500/10 rounded-full blur-3xl"
+          className="absolute top-40 right-32 w-20 h-20 bg-gradient-to-r from-bronze-500/25 to-amber-600/25 rounded-full backdrop-blur-sm"
+          style={{ 
+            transform: 'perspective(1000px) rotateX(-30deg) rotateY(60deg)',
+            transformStyle: 'preserve-3d',
+            boxShadow: '0 0 30px rgba(218, 143, 74, 0.4)'
+          }}
         />
+
+        <motion.div
+          animate={{
+            y: [0, -20, 0],
+            rotateY: [0, 360, 0],
+            scale: [1, 1.2, 1],
+          }}
+          transition={{
+            duration: 12,
+            repeat: Infinity,
+            ease: "easeInOut",
+            delay: 6
+          }}
+          className="absolute bottom-32 left-1/4 w-28 h-28 bg-gradient-to-r from-amber-400/20 to-bronze-500/20 backdrop-blur-sm"
+          style={{ 
+            transform: 'perspective(1000px) rotateX(60deg) rotateZ(30deg)',
+            transformStyle: 'preserve-3d',
+            borderRadius: '30%',
+            boxShadow: '0 0 50px rgba(218, 143, 74, 0.5)'
+          }}
+        />
+
+        {/* Animated Grid Background */}
+        <div className="absolute inset-0 opacity-5">
+          <div 
+            className="w-full h-full"
+            style={{
+              backgroundImage: `
+                linear-gradient(rgba(218, 143, 74, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(218, 143, 74, 0.1) 1px, transparent 1px)
+              `,
+              backgroundSize: '60px 60px',
+              transform: 'perspective(1000px) rotateX(60deg)',
+              transformOrigin: 'center bottom'
+            }}
+          />
+        </div>
+
+        {/* Glowing Orbs */}
+        <div className="absolute top-1/4 left-1/3 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl animate-pulse-glow"></div>
+        <div className="absolute bottom-1/3 right-1/3 w-80 h-80 bg-bronze-500/15 rounded-full blur-3xl animate-pulse-glow" style={{ animationDelay: '2s' }}></div>
       </div>
 
       <motion.div
-        initial={{ opacity: 0, y: 20, rotateX: -15 }}
+        initial={{ opacity: 0, y: 30, rotateX: -15 }}
         animate={{ opacity: 1, y: 0, rotateX: 0 }}
         transition={{ duration: 0.8 }}
         className="relative z-10 max-w-md w-full space-y-8"
@@ -94,24 +149,41 @@ const Login: React.FC = () => {
             rotateY: 2,
             rotateX: 2,
           }}
-          className="bg-dark-800/20 backdrop-blur-xl rounded-3xl p-8 border border-olive-500/20 shadow-2xl"
+          className="bg-white/90 backdrop-blur-xl rounded-3xl p-8 border border-beige-200/50 shadow-3d hover:shadow-3d-hover transition-all duration-500"
           style={{ 
             transformStyle: 'preserve-3d',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 40px rgba(138, 156, 112, 0.1)'
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 40px rgba(218, 143, 74, 0.1)'
           }}
         >
+          {/* Header Section */}
           <div className="text-center mb-8">
             <motion.div 
               className="flex justify-center mb-6"
               whileHover={{ rotateY: 180 }}
               transition={{ duration: 0.6 }}
             >
-              <div className="w-20 h-20 bg-gradient-to-r from-olive-600 to-olive-700 rounded-3xl flex items-center justify-center shadow-lg">
+              <div className="w-20 h-20 bg-gradient-to-r from-amber-500 to-bronze-600 rounded-3xl flex items-center justify-center shadow-3d">
                 <TrendingUp className="w-10 h-10 text-white" />
               </div>
             </motion.div>
-            <h2 className="text-4xl font-bold text-white mb-3">Welcome Back</h2>
-            <p className="text-olive-200/70">Sign in to your AutoTraderHub account</p>
+            <h2 className="text-4xl font-bold text-bronze-800 mb-3">Welcome Back</h2>
+            <p className="text-bronze-600">Sign in to your AutoTraderHub account</p>
+            
+            {/* Feature Highlights */}
+            <div className="flex justify-center space-x-6 mt-6">
+              <div className="flex items-center space-x-2 text-bronze-600">
+                <Shield className="w-4 h-4 text-amber-600" />
+                <span className="text-sm">Secure</span>
+              </div>
+              <div className="flex items-center space-x-2 text-bronze-600">
+                <Zap className="w-4 h-4 text-amber-600" />
+                <span className="text-sm">Fast</span>
+              </div>
+              <div className="flex items-center space-x-2 text-bronze-600">
+                <TrendingUp className="w-4 h-4 text-amber-600" />
+                <span className="text-sm">Automated</span>
+              </div>
+            </div>
           </div>
 
           {/* Error Message Display */}
@@ -119,14 +191,14 @@ const Login: React.FC = () => {
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mb-6 p-4 bg-red-800/20 border border-red-500/30 rounded-xl flex items-center space-x-3"
+              className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center space-x-3"
             >
-              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
               <div>
-                <p className="text-red-300 font-medium">{loginError}</p>
+                <p className="text-red-700 font-medium">{loginError}</p>
                 {loginError === 'Account not available' && (
-                  <p className="text-red-200/70 text-sm mt-1">
-                    Don't have an account? <Link to="/register" className="text-red-300 hover:text-red-200 underline">Create one here</Link>
+                  <p className="text-red-600 text-sm mt-1">
+                    Don't have an account? <Link to="/register" className="text-red-700 hover:text-red-600 underline font-medium">Create one here</Link>
                   </p>
                 )}
               </div>
@@ -135,11 +207,11 @@ const Login: React.FC = () => {
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-olive-200/90 mb-2">
+              <label className="block text-sm font-medium text-bronze-700 mb-2">
                 Email Address
               </label>
               <div className="relative">
-                <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-olive-400/50" />
+                <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-bronze-400" />
                 <input
                   {...register('email', { 
                     required: 'Email is required',
@@ -149,21 +221,21 @@ const Login: React.FC = () => {
                     }
                   })}
                   type="email"
-                  className="w-full pl-12 pr-4 py-4 bg-dark-800/30 border border-olive-500/20 rounded-xl text-white placeholder-olive-300/50 focus:ring-2 focus:ring-olive-500 focus:border-transparent transition-all backdrop-blur-sm"
+                  className="w-full pl-12 pr-4 py-4 bg-cream-50 border border-beige-200 rounded-xl text-bronze-800 placeholder-bronze-400 focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all backdrop-blur-sm shadow-inner-3d"
                   placeholder="Enter your email"
                 />
               </div>
               {errors.email && (
-                <p className="mt-2 text-sm text-red-400">{errors.email.message}</p>
+                <p className="mt-2 text-sm text-red-600">{errors.email.message}</p>
               )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-olive-200/90 mb-2">
+              <label className="block text-sm font-medium text-bronze-700 mb-2">
                 Password
               </label>
               <div className="relative">
-                <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-olive-400/50" />
+                <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-bronze-400" />
                 <input
                   {...register('password', { 
                     required: 'Password is required',
@@ -173,19 +245,19 @@ const Login: React.FC = () => {
                     }
                   })}
                   type={showPassword ? 'text' : 'password'}
-                  className="w-full pl-12 pr-14 py-4 bg-dark-800/30 border border-olive-500/20 rounded-xl text-white placeholder-olive-300/50 focus:ring-2 focus:ring-olive-500 focus:border-transparent transition-all backdrop-blur-sm"
+                  className="w-full pl-12 pr-14 py-4 bg-cream-50 border border-beige-200 rounded-xl text-bronze-800 placeholder-bronze-400 focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all backdrop-blur-sm shadow-inner-3d"
                   placeholder="Enter your password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 transform -translate-y-1/2 text-olive-400/50 hover:text-olive-300/70 transition-colors"
+                  className="absolute right-4 top-1/2 transform -translate-y-1/2 text-bronze-400 hover:text-bronze-600 transition-colors"
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
               {errors.password && (
-                <p className="mt-2 text-sm text-red-400">{errors.password.message}</p>
+                <p className="mt-2 text-sm text-red-600">{errors.password.message}</p>
               )}
             </div>
 
@@ -193,13 +265,13 @@ const Login: React.FC = () => {
               <label className="flex items-center">
                 <input
                   type="checkbox"
-                  className="w-4 h-4 text-olive-600 bg-dark-800/30 border-olive-500/20 rounded focus:ring-olive-500"
+                  className="w-4 h-4 text-amber-600 bg-cream-50 border-beige-200 rounded focus:ring-amber-500"
                 />
-                <span className="ml-2 text-sm text-olive-200/70">Remember me</span>
+                <span className="ml-2 text-sm text-bronze-600">Remember me</span>
               </label>
               <Link
                 to="/forgot-password"
-                className="text-sm text-olive-400 hover:text-olive-300 transition-colors"
+                className="text-sm text-amber-600 hover:text-amber-500 transition-colors font-medium"
               >
                 Forgot password?
               </Link>
@@ -210,25 +282,40 @@ const Login: React.FC = () => {
               whileTap={{ scale: 0.98 }}
               type="submit"
               disabled={isLoading}
-              className="w-full bg-gradient-to-r from-olive-600 to-olive-700 text-white py-4 rounded-xl font-bold text-lg hover:shadow-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-gradient-to-r from-amber-500 to-bronze-600 text-white py-4 rounded-xl font-bold text-lg hover:shadow-3d-hover transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-3d"
               style={{ 
-                boxShadow: '0 10px 25px rgba(138, 156, 112, 0.3)'
+                boxShadow: '0 10px 25px rgba(218, 143, 74, 0.3)'
               }}
             >
-              {isLoading ? 'Signing In...' : 'Sign In'}
+              {isLoading ? (
+                <div className="flex items-center justify-center space-x-2">
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>Signing In...</span>
+                </div>
+              ) : (
+                'Sign In'
+              )}
             </motion.button>
           </form>
 
           <div className="mt-8 text-center">
-            <p className="text-olive-200/70">
+            <p className="text-bronze-600">
               Don't have an account?{' '}
               <Link
                 to="/register"
-                className="text-olive-400 hover:text-olive-300 font-medium transition-colors"
+                className="text-amber-600 hover:text-amber-500 font-medium transition-colors"
               >
                 Sign up here
               </Link>
             </p>
+          </div>
+
+          {/* Security Badge */}
+          <div className="mt-6 pt-6 border-t border-beige-200">
+            <div className="flex items-center justify-center space-x-2 text-bronze-500">
+              <Shield className="w-4 h-4" />
+              <span className="text-xs">256-bit SSL encrypted</span>
+            </div>
           </div>
         </motion.div>
       </motion.div>

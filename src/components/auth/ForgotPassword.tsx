@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useForm } from 'react-hook-form';
-import { Mail, Lock, TrendingUp } from 'lucide-react';
+import { Mail, Lock, TrendingUp, Shield, Clock, CheckCircle, ArrowLeft } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { authAPI } from '../../services/api';
@@ -117,7 +117,7 @@ export default function ForgotPassword() {
           setIsLoading(false);
           return;
         }
-        // Validate required fields
+        
         if (!resetToken || !data.password) {
           console.error('Missing required fields:', { resetToken, password: data.password });
           toast.error('Missing required fields for password reset');
@@ -157,41 +157,75 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-dark-950 via-olive-950 to-dark-900 flex items-center justify-center px-4 sm:px-6 lg:px-8 relative">
+    <div className="min-h-screen bg-gradient-to-br from-cream-50 via-beige-100 to-sand-200 flex items-center justify-center px-4 sm:px-6 lg:px-8 relative overflow-hidden">
       <Toaster position="top-right" />
-      {/* Background Spheres */}
-      <div className="absolute inset-0 perspective-2000 -z-10">
+      
+      {/* Enhanced 3D Background Elements */}
+      <div className="absolute inset-0 perspective-2000">
         <motion.div
           animate={{
-            rotateX: [0, 360],
-            rotateY: [0, 180],
+            y: [0, -20, 0],
+            rotateX: [0, 360, 0],
+            rotateY: [0, 180, 0],
             scale: [1, 1.1, 1],
           }}
           transition={{
-            duration: 20,
+            duration: 18,
             repeat: Infinity,
-            ease: "linear"
+            ease: "easeInOut"
           }}
-          className="absolute top-1/4 left-1/4 w-72 h-72 bg-olive-500/10 rounded-full blur-3xl"
+          className="absolute top-20 left-20 w-24 h-24 bg-gradient-to-r from-amber-500/20 to-bronze-600/20 rounded-2xl backdrop-blur-sm"
+          style={{ 
+            transform: 'perspective(1000px) rotateX(45deg) rotateY(45deg)',
+            transformStyle: 'preserve-3d',
+            boxShadow: '0 0 40px rgba(218, 143, 74, 0.3)'
+          }}
         />
+        
         <motion.div
           animate={{
-            rotateY: [0, -360],
-            rotateZ: [0, 180],
+            y: [0, 25, 0],
+            rotateY: [0, -360, 0],
+            rotateZ: [0, 180, 0],
             scale: [1, 0.8, 1],
           }}
           transition={{
-            duration: 25,
+            duration: 22,
             repeat: Infinity,
-            ease: "linear",
+            ease: "easeInOut",
             delay: 5
           }}
-          className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-dark-500/10 rounded-full blur-3xl"
+          className="absolute bottom-20 right-20 w-32 h-32 bg-gradient-to-r from-bronze-500/15 to-amber-600/15 rounded-full backdrop-blur-sm"
+          style={{ 
+            transform: 'perspective(1000px) rotateX(-30deg) rotateY(60deg)',
+            transformStyle: 'preserve-3d',
+            boxShadow: '0 0 50px rgba(218, 143, 74, 0.4)'
+          }}
         />
+
+        {/* Floating Security Icons */}
+        <motion.div
+          animate={{
+            y: [0, -15, 0],
+            rotate: [0, 360],
+          }}
+          transition={{
+            duration: 14,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+          className="absolute top-1/3 right-1/4 w-16 h-16 bg-amber-500/10 rounded-full flex items-center justify-center backdrop-blur-sm"
+        >
+          <Shield className="w-8 h-8 text-amber-600/50" />
+        </motion.div>
+
+        {/* Glowing Orbs */}
+        <div className="absolute top-1/4 left-1/3 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl animate-pulse-glow"></div>
+        <div className="absolute bottom-1/3 right-1/3 w-80 h-80 bg-bronze-500/15 rounded-full blur-3xl animate-pulse-glow" style={{ animationDelay: '2s' }}></div>
       </div>
 
       <motion.div
-        initial={{ opacity: 0, y: 20, rotateX: -15 }}
+        initial={{ opacity: 0, y: 30, rotateX: -15 }}
         animate={{ opacity: 1, y: 0, rotateX: 0 }}
         transition={{ duration: 0.8 }}
         className="relative z-10 max-w-md w-full space-y-8"
@@ -199,14 +233,14 @@ export default function ForgotPassword() {
       >
         <motion.div
           whileHover={{
-            scale: 1.02,
-            rotateY: 2,
-            rotateX: 2,
+            scale: 1.01,
+            rotateY: 1,
+            rotateX: 1,
           }}
-          className="bg-dark-800/20 backdrop-blur-xl rounded-3xl p-8 border border-olive-500/20 shadow-2xl"
+          className="bg-white/90 backdrop-blur-xl rounded-3xl p-8 border border-beige-200/50 shadow-3d hover:shadow-3d-hover transition-all duration-500"
           style={{
             transformStyle: 'preserve-3d',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 40px rgba(138, 156, 112, 0.1)'
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 40px rgba(218, 143, 74, 0.1)'
           }}
         >
           <div className="text-center mb-8">
@@ -215,12 +249,12 @@ export default function ForgotPassword() {
               whileHover={{ rotateY: 180 }}
               transition={{ duration: 0.6 }}
             >
-              <div className="w-20 h-20 bg-gradient-to-r from-olive-600 to-olive-700 rounded-3xl flex items-center justify-center shadow-lg">
+              <div className="w-20 h-20 bg-gradient-to-r from-amber-500 to-bronze-600 rounded-3xl flex items-center justify-center shadow-3d">
                 <TrendingUp className="w-10 h-10 text-white" />
               </div>
             </motion.div>
-            <h2 className="text-4xl font-bold text-white mb-3">Forgot Password</h2>
-            <p className="text-olive-200/70">Reset your AutoTraderHub account password</p>
+            <h2 className="text-4xl font-bold text-bronze-800 mb-3">Reset Password</h2>
+            <p className="text-bronze-600">Secure password recovery for your AutoTraderHub account</p>
             
             {/* Step indicator */}
             <div className="flex justify-center mt-6 space-x-2">
@@ -229,25 +263,36 @@ export default function ForgotPassword() {
                   key={stepNum}
                   className={`w-3 h-3 rounded-full transition-all duration-300 ${
                     stepNum === step
-                      ? 'bg-olive-500 scale-125'
+                      ? 'bg-amber-500 scale-125 shadow-3d'
                       : stepNum < step
-                      ? 'bg-olive-600'
-                      : 'bg-olive-800/30'
+                      ? 'bg-amber-600'
+                      : 'bg-beige-300'
                   }`}
                 />
               ))}
+            </div>
+            
+            {/* Step Labels */}
+            <div className="flex justify-center mt-2 space-x-8 text-xs text-bronze-500">
+              <span className={step >= 1 ? 'text-amber-600 font-medium' : ''}>Email</span>
+              <span className={step >= 2 ? 'text-amber-600 font-medium' : ''}>Verify</span>
+              <span className={step >= 3 ? 'text-amber-600 font-medium' : ''}>Reset</span>
             </div>
           </div>
 
           <form onSubmit={handleSubmit(handleNext)} className="space-y-6">
             {step === 1 && (
-              <>
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.4 }}
+              >
                 <div>
-                  <label className="block text-sm font-medium text-olive-200/90 mb-2">
+                  <label className="block text-sm font-medium text-bronze-700 mb-2">
                     Email Address
                   </label>
                   <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-olive-400/50" />
+                    <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-bronze-400" />
                     <input
                       type="email"
                       {...register('email', {
@@ -257,33 +302,47 @@ export default function ForgotPassword() {
                           message: 'Invalid email address'
                         }
                       })}
-                      className="w-full pl-12 pr-4 py-4 bg-dark-800/30 border border-olive-500/20 rounded-xl text-white placeholder-olive-300/50 focus:ring-2 focus:ring-olive-500 focus:border-transparent transition-all backdrop-blur-sm"
+                      className="w-full pl-12 pr-4 py-4 bg-cream-50 border border-beige-200 rounded-xl text-bronze-800 placeholder-bronze-400 focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all backdrop-blur-sm shadow-inner-3d"
                       placeholder="Enter your email"
                     />
                   </div>
                   {errors.email && (
-                    <p className="mt-2 text-sm text-red-400">{errors.email.message}</p>
+                    <p className="mt-2 text-sm text-red-600">{errors.email.message}</p>
                   )}
                 </div>
-              </>
+                
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mt-4">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <Shield className="w-4 h-4 text-amber-600" />
+                    <span className="text-amber-700 text-sm font-medium">Security Notice</span>
+                  </div>
+                  <p className="text-amber-600 text-xs">
+                    We'll send a secure verification code to your email address to verify your identity.
+                  </p>
+                </div>
+              </motion.div>
             )}
 
             {step === 2 && (
-              <>
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.4 }}
+              >
                 <div className="text-center mb-6">
-                  <p className="text-sm text-olive-200/70 mb-2">
-                    Enter OTP sent to
+                  <p className="text-sm text-bronze-600 mb-2">
+                    Enter the verification code sent to
                   </p>
-                  <p className="font-medium text-white text-lg">
+                  <p className="font-medium text-bronze-800 text-lg">
                     {identifier}
                   </p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-olive-200/90 mb-2">
-                    OTP Code
+                  <label className="block text-sm font-medium text-bronze-700 mb-2">
+                    Verification Code
                   </label>
                   <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-olive-400/50" />
+                    <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-bronze-400" />
                     <input
                       type="text"
                       {...register('otp', {
@@ -293,16 +352,16 @@ export default function ForgotPassword() {
                           message: 'OTP must be 6 digits'
                         }
                       })}
-                      className="w-full pl-12 pr-4 py-4 bg-dark-800/30 border border-olive-500/20 rounded-xl text-white placeholder-olive-300/50 focus:ring-2 focus:ring-olive-500 focus:border-transparent transition-all backdrop-blur-sm text-center text-lg tracking-widest"
+                      className="w-full pl-12 pr-4 py-4 bg-cream-50 border border-beige-200 rounded-xl text-bronze-800 placeholder-bronze-400 focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all backdrop-blur-sm text-center text-lg tracking-widest shadow-inner-3d"
                       placeholder="000000"
                       maxLength={6}
                     />
                   </div>
                   {errors.otp && (
-                    <p className="mt-2 text-sm text-red-400">{errors.otp.message}</p>
+                    <p className="mt-2 text-sm text-red-600">{errors.otp.message}</p>
                   )}
                 </div>
-                <div className="text-center">
+                <div className="text-center mt-4">
                   {canResendOtp ? (
                     <motion.button
                       type="button"
@@ -310,74 +369,84 @@ export default function ForgotPassword() {
                       disabled={isLoading}
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
-                      className="text-olive-400 hover:text-olive-300 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      className="text-amber-600 hover:text-amber-500 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                       {isLoading ? 'Sending...' : 'Resend OTP'}
                     </motion.button>
                   ) : (
-                    <p className="text-olive-200/70 text-sm">
-                      Resend OTP in {resendTimer} seconds
-                    </p>
+                    <div className="flex items-center justify-center space-x-2 text-bronze-600 text-sm">
+                      <Clock className="w-4 h-4" />
+                      <span>Resend OTP in {resendTimer} seconds</span>
+                    </div>
                   )}
                 </div>
-              </>
+              </motion.div>
             )}
 
             {step === 3 && (
-              <>
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.4 }}
+              >
                 <div className="text-center mb-6">
-                  <p className="text-sm text-olive-200/70 mb-2">
-                    Set a new password for
+                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <CheckCircle className="w-8 h-8 text-green-600" />
+                  </div>
+                  <p className="text-sm text-bronze-600 mb-2">
+                    Identity verified! Set a new password for
                   </p>
-                  <p className="font-medium text-white text-lg">
+                  <p className="font-medium text-bronze-800 text-lg">
                     {identifier}
                   </p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-olive-200/90 mb-2">
-                    New Password
-                  </label>
-                  <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-olive-400/50" />
-                    <input
-                      type="password"
-                      {...register('password', { 
-                        required: 'Password is required',
-                        minLength: {
-                          value: 6,
-                          message: 'Password must be at least 6 characters'
-                        }
-                      })}
-                      className="w-full pl-12 pr-4 py-4 bg-dark-800/30 border border-olive-500/20 rounded-xl text-white placeholder-olive-300/50 focus:ring-2 focus:ring-olive-500 focus:border-transparent transition-all backdrop-blur-sm"
-                      placeholder="Enter new password"
-                    />
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-bronze-700 mb-2">
+                      New Password
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-bronze-400" />
+                      <input
+                        type="password"
+                        {...register('password', { 
+                          required: 'Password is required',
+                          minLength: {
+                            value: 6,
+                            message: 'Password must be at least 6 characters'
+                          }
+                        })}
+                        className="w-full pl-12 pr-4 py-4 bg-cream-50 border border-beige-200 rounded-xl text-bronze-800 placeholder-bronze-400 focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all backdrop-blur-sm shadow-inner-3d"
+                        placeholder="Enter new password"
+                      />
+                    </div>
+                    {errors.password && (
+                      <p className="mt-2 text-sm text-red-600">{errors.password.message}</p>
+                    )}
                   </div>
-                  {errors.password && (
-                    <p className="mt-2 text-sm text-red-400">{errors.password.message}</p>
-                  )}
-                </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-olive-200/90 mb-2">
-                    Confirm Password
-                  </label>
-                  <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-olive-400/50" />
-                    <input
-                      type="password"
-                      {...register('confirmPassword', {
-                        required: 'Please confirm your password',
-                        validate: value => value === password || 'Passwords do not match',
-                      })}
-                      className="w-full pl-12 pr-4 py-4 bg-dark-800/30 border border-olive-500/20 rounded-xl text-white placeholder-olive-300/50 focus:ring-2 focus:ring-olive-500 focus:border-transparent transition-all backdrop-blur-sm"
-                      placeholder="Confirm new password"
-                    />
+                  <div>
+                    <label className="block text-sm font-medium text-bronze-700 mb-2">
+                      Confirm Password
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-bronze-400" />
+                      <input
+                        type="password"
+                        {...register('confirmPassword', {
+                          required: 'Please confirm your password',
+                          validate: value => value === password || 'Passwords do not match',
+                        })}
+                        className="w-full pl-12 pr-4 py-4 bg-cream-50 border border-beige-200 rounded-xl text-bronze-800 placeholder-bronze-400 focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all backdrop-blur-sm shadow-inner-3d"
+                        placeholder="Confirm new password"
+                      />
+                    </div>
+                    {errors.confirmPassword && (
+                      <p className="mt-2 text-sm text-red-600">{errors.confirmPassword.message}</p>
+                    )}
                   </div>
-                  {errors.confirmPassword && (
-                    <p className="mt-2 text-sm text-red-400">{errors.confirmPassword.message}</p>
-                  )}
                 </div>
-              </>
+              </motion.div>
             )}
 
             <motion.button
@@ -385,35 +454,47 @@ export default function ForgotPassword() {
               disabled={isLoading}
               whileHover={{ scale: 1.02, rotateX: 5 }}
               whileTap={{ scale: 0.98 }}
-              className="w-full bg-gradient-to-r from-olive-600 to-olive-700 text-white py-4 rounded-xl font-bold text-lg hover:shadow-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-gradient-to-r from-amber-500 to-bronze-600 text-white py-4 rounded-xl font-bold text-lg hover:shadow-3d-hover transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-3d"
               style={{
-                boxShadow: '0 10px 25px rgba(138, 156, 112, 0.3)',
+                boxShadow: '0 10px 25px rgba(218, 143, 74, 0.3)',
               }}
             >
-              {isLoading
-                ? 'Processing...'
-                : step === 1
-                ? 'Send OTP'
-                : step === 2
-                ? 'Verify OTP'
-                : 'Reset Password'}
+              {isLoading ? (
+                <div className="flex items-center justify-center space-x-2">
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>Processing...</span>
+                </div>
+              ) : (
+                step === 1 ? 'Send Verification Code' :
+                step === 2 ? 'Verify Code' :
+                'Reset Password'
+              )}
             </motion.button>
 
             {step > 1 && (
               <motion.button
                 type="button"
                 onClick={() => {
-                  setStep(step - 1);
+                  setStep((step - 1) as FormStep);
                   reset();
                 }}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                className="w-full bg-dark-800/50 text-olive-200 py-3 rounded-xl font-medium hover:bg-dark-700/50 transition-all border border-olive-500/20"
+                className="w-full bg-beige-100 text-bronze-700 py-3 rounded-xl font-medium hover:bg-beige-200 transition-all border border-beige-200 shadow-inner-3d flex items-center justify-center space-x-2"
               >
-                Back
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back</span>
               </motion.button>
             )}
           </form>
+
+          {/* Security Footer */}
+          <div className="mt-8 pt-6 border-t border-beige-200">
+            <div className="flex items-center justify-center space-x-2 text-bronze-500">
+              <Shield className="w-4 h-4" />
+              <span className="text-xs">Secure password reset with end-to-end encryption</span>
+            </div>
+          </div>
         </motion.div>
       </motion.div>
     </div>

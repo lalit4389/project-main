@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, User, Eye, EyeOff, TrendingUp, Phone, CheckCircle } from 'lucide-react';
+import { Mail, Lock, User, Eye, EyeOff, TrendingUp, Phone, CheckCircle, Shield, Zap, Bot } from 'lucide-react';
 import { authAPI } from '../../services/api';
 import toast from 'react-hot-toast';
 
@@ -21,7 +21,7 @@ const Register: React.FC = () => {
   const [showOtpForm, setShowOtpForm] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [otp, setOtp] = useState('');
-  const [userIdentifier, setUserIdentifier] = useState(''); // To store email or mobile for OTP verification
+  const [userIdentifier, setUserIdentifier] = useState('');
   const [canResendOtp, setCanResendOtp] = useState(false);
   const [resendTimer, setResendTimer] = useState(60);
 
@@ -71,7 +71,6 @@ const Register: React.FC = () => {
         setCanResendOtp(false);
         toast.success('OTP sent! Please check your email/SMS and enter the verification code.');
       } else {
-        // Fallback for old flow (shouldn't happen with new implementation)
         localStorage.setItem('authToken', response.data.token);
         toast.success('Registration successful!');
         navigate('/dashboard');
@@ -94,17 +93,14 @@ const Register: React.FC = () => {
       const response = await authAPI.verifyOtp({ identifier: userIdentifier, otp });
       
       if (response.data.accountCreated) {
-        // Show success message and redirect to login
         setShowOtpForm(false);
         setShowSuccessMessage(true);
         toast.success('Account created successfully! You can now login.');
         
-        // Redirect to login after 3 seconds
         setTimeout(() => {
           navigate('/login');
         }, 3000);
       } else {
-        // Fallback - shouldn't happen with new implementation
         toast.success(response.data.message);
         navigate('/login');
       }
@@ -130,76 +126,118 @@ const Register: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-dark-950 via-olive-950 to-dark-900 flex items-center justify-center px-4 sm:px-6 lg:px-8">
-      {/* Background Spheres */}
+    <div className="min-h-screen bg-gradient-to-br from-cream-50 via-beige-100 to-sand-200 flex items-center justify-center px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+      {/* Enhanced 3D Background Elements */}
       <div className="absolute inset-0 perspective-2000">
         <motion.div
-          initial={{ rotateX: 0, rotateY: 0, scale: 1 }}
-          key="bg-sphere-1" 
           animate={{
-            rotateX: [0, 360],
-            rotateY: [0, 180],
+            y: [0, -25, 0],
+            rotateX: [0, 360, 0],
+            rotateY: [0, 180, 0],
             scale: [1, 1.1, 1],
+          }}
+          transition={{
+            duration: 16,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+          className="absolute top-20 left-20 w-24 h-24 bg-gradient-to-r from-amber-500/20 to-bronze-600/20 rounded-2xl backdrop-blur-sm"
+          style={{ 
+            transform: 'perspective(1000px) rotateX(45deg) rotateY(45deg)',
+            transformStyle: 'preserve-3d',
+            boxShadow: '0 0 40px rgba(218, 143, 74, 0.3)'
+          }}
+        />
+        
+        <motion.div
+          animate={{
+            y: [0, 30, 0],
+            rotateY: [0, -360, 0],
+            rotateZ: [0, 180, 0],
+            scale: [1, 0.8, 1],
           }}
           transition={{
             duration: 20,
             repeat: Infinity,
-            ease: "linear"
+            ease: "easeInOut",
+            delay: 4
           }}
-          className="absolute top-1/4 left-1/4 w-72 h-72 bg-olive-500/10 rounded-full blur-3xl"
+          className="absolute bottom-20 right-20 w-32 h-32 bg-gradient-to-r from-bronze-500/15 to-amber-600/15 rounded-full backdrop-blur-sm"
+          style={{ 
+            transform: 'perspective(1000px) rotateX(-30deg) rotateY(60deg)',
+            transformStyle: 'preserve-3d',
+            boxShadow: '0 0 50px rgba(218, 143, 74, 0.4)'
+          }}
         />
+
+        {/* Floating Icons */}
         <motion.div
-          initial={{ rotateY: 0, rotateZ: 0, scale: 1 }}
-          key="bg-sphere-2"
           animate={{
-            rotateY: [0, -360],
-            rotateZ: [0, 180],
-            scale: [1, 0.8, 1],
+            y: [0, -15, 0],
+            rotate: [0, 360],
           }}
           transition={{
-            duration: 25,
+            duration: 12,
             repeat: Infinity,
-            ease: "linear",
-            delay: 5
+            ease: "easeInOut"
           }}
-          className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-dark-500/10 rounded-full blur-3xl"
-        />
+          className="absolute top-1/3 right-1/4 w-16 h-16 bg-amber-500/10 rounded-full flex items-center justify-center backdrop-blur-sm"
+        >
+          <Bot className="w-8 h-8 text-amber-600/50" />
+        </motion.div>
+
+        {/* Glowing Orbs */}
+        <div className="absolute top-1/4 left-1/3 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl animate-pulse-glow"></div>
+        <div className="absolute bottom-1/3 right-1/3 w-80 h-80 bg-bronze-500/15 rounded-full blur-3xl animate-pulse-glow" style={{ animationDelay: '2s' }}></div>
       </div>
 
       <motion.div
-        initial={{ opacity: 0, y: 20, rotateX: -15 }}
+        initial={{ opacity: 0, y: 30, rotateX: -15 }}
         animate={{ opacity: 1, y: 0, rotateX: 0 }}
         transition={{ duration: 0.8 }}
         className="relative z-10 max-w-md w-full space-y-8"
-        key="register-form-container"
         style={{ perspective: '1000px' }}
       >
         <motion.div
           whileHover={{ 
-            scale: 1.02,
-            rotateY: 2,
-            rotateX: 2,
+            scale: 1.01,
+            rotateY: 1,
+            rotateX: 1,
           }}
-          key="register-form-card"
-          className="bg-dark-800/20 backdrop-blur-xl rounded-3xl p-8 border border-olive-500/20 shadow-2xl"
+          className="bg-white/90 backdrop-blur-xl rounded-3xl p-8 border border-beige-200/50 shadow-3d hover:shadow-3d-hover transition-all duration-500"
           style={{ 
             transformStyle: 'preserve-3d',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 40px rgba(138, 156, 112, 0.1)'
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 40px rgba(218, 143, 74, 0.1)'
           }}
         >
           <div className="text-center mb-8">
             <motion.div 
               className="flex justify-center mb-6"
-              key="logo-animation"
               whileHover={{ rotateY: 180 }}
               transition={{ duration: 0.6 }}
             >
-              <div className="w-20 h-20 bg-gradient-to-r from-olive-600 to-olive-700 rounded-3xl flex items-center justify-center shadow-lg">
+              <div className="w-20 h-20 bg-gradient-to-r from-amber-500 to-bronze-600 rounded-3xl flex items-center justify-center shadow-3d">
                 <TrendingUp className="w-10 h-10 text-white" />
               </div>
             </motion.div>
-            <h2 className="text-4xl font-bold text-white mb-3">Join AutoTraderHub</h2>
-            <p className="text-olive-200/70">Create your account and start trading smarter</p>
+            <h2 className="text-4xl font-bold text-bronze-800 mb-3">Join AutoTraderHub</h2>
+            <p className="text-bronze-600">Create your account and start trading smarter</p>
+            
+            {/* Feature Highlights */}
+            <div className="flex justify-center space-x-6 mt-6">
+              <div className="flex items-center space-x-2 text-bronze-600">
+                <Shield className="w-4 h-4 text-amber-600" />
+                <span className="text-sm">Secure</span>
+              </div>
+              <div className="flex items-center space-x-2 text-bronze-600">
+                <Zap className="w-4 h-4 text-amber-600" />
+                <span className="text-sm">Fast Setup</span>
+              </div>
+              <div className="flex items-center space-x-2 text-bronze-600">
+                <Bot className="w-4 h-4 text-amber-600" />
+                <span className="text-sm">AI-Powered</span>
+              </div>
+            </div>
           </div>
 
           <AnimatePresence mode="wait">
@@ -214,11 +252,11 @@ const Register: React.FC = () => {
                 className="space-y-6"
               >
                 <div>
-                  <label className="block text-sm font-medium text-olive-200/90 mb-2">
+                  <label className="block text-sm font-medium text-bronze-700 mb-2">
                     Full Name
                   </label>
                   <div className="relative">
-                    <User className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-olive-400/50" />
+                    <User className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-bronze-400" />
                     <input
                       {...register('name', {
                         required: 'Name is required',
@@ -228,21 +266,21 @@ const Register: React.FC = () => {
                         }
                       })}
                       type="text"
-                      className="w-full pl-12 pr-4 py-4 bg-dark-800/30 border border-olive-500/20 rounded-xl text-white placeholder-olive-300/50 focus:ring-2 focus:ring-olive-500 focus:border-transparent transition-all backdrop-blur-sm"
+                      className="w-full pl-12 pr-4 py-4 bg-cream-50 border border-beige-200 rounded-xl text-bronze-800 placeholder-bronze-400 focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all backdrop-blur-sm shadow-inner-3d"
                       placeholder="Enter your full name"
                     />
                   </div>
                   {errors.name && (
-                    <p className="mt-2 text-sm text-red-400">{errors.name.message}</p>
+                    <p className="mt-2 text-sm text-red-600">{errors.name.message}</p>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-olive-200/90 mb-2">
+                  <label className="block text-sm font-medium text-bronze-700 mb-2">
                     Mobile Number
                   </label>
                   <div className="relative">
-                    <Phone className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-olive-400/50" />
+                    <Phone className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-bronze-400" />
                     <input
                       {...register('mobileNumber', {
                         minLength: {
@@ -251,21 +289,21 @@ const Register: React.FC = () => {
                         }
                       })}
                       type="tel"
-                      className="w-full pl-12 pr-4 py-4 bg-dark-800/30 border border-olive-500/20 rounded-xl text-white placeholder-olive-300/50 focus:ring-2 focus:ring-olive-500 focus:border-transparent transition-all backdrop-blur-sm"
+                      className="w-full pl-12 pr-4 py-4 bg-cream-50 border border-beige-200 rounded-xl text-bronze-800 placeholder-bronze-400 focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all backdrop-blur-sm shadow-inner-3d"
                       placeholder="Enter your mobile number"
                     />
                   </div>
                   {errors.mobileNumber && (
-                    <p className="mt-2 text-sm text-red-400">{errors.mobileNumber.message}</p>
+                    <p className="mt-2 text-sm text-red-600">{errors.mobileNumber.message}</p>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-olive-200/90 mb-2">
+                  <label className="block text-sm font-medium text-bronze-700 mb-2">
                     Email Address
                   </label>
                   <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-olive-400/50" />
+                    <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-bronze-400" />
                    <input
                       {...register('email', {
                         required: 'Email is required',
@@ -275,21 +313,21 @@ const Register: React.FC = () => {
                         }
                       })}
                       type="email"
-                      className="w-full pl-12 pr-4 py-4 bg-dark-800/30 border border-olive-500/20 rounded-xl text-white placeholder-olive-300/50 focus:ring-2 focus:ring-olive-500 focus:border-transparent transition-all backdrop-blur-sm"
+                      className="w-full pl-12 pr-4 py-4 bg-cream-50 border border-beige-200 rounded-xl text-bronze-800 placeholder-bronze-400 focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all backdrop-blur-sm shadow-inner-3d"
                       placeholder="Enter your email"
                     />
                   </div>
                   {errors.email && (
-                    <p className="mt-2 text-sm text-red-400">{errors.email.message}</p>
+                    <p className="mt-2 text-sm text-red-600">{errors.email.message}</p>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-olive-200/90 mb-2">
+                  <label className="block text-sm font-medium text-bronze-700 mb-2">
                     Password
                   </label>
                   <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-olive-400/50" />
+                    <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-bronze-400" />
                     <input
                       {...register('password', {
                         required: 'Password is required',
@@ -299,64 +337,64 @@ const Register: React.FC = () => {
                         }
                       })}
                       type={showPassword ? 'text' : 'password'}
-                      className="w-full pl-12 pr-14 py-4 bg-dark-800/30 border border-olive-500/20 rounded-xl text-white placeholder-olive-300/50 focus:ring-2 focus:ring-olive-500 focus:border-transparent transition-all backdrop-blur-sm"
+                      className="w-full pl-12 pr-14 py-4 bg-cream-50 border border-beige-200 rounded-xl text-bronze-800 placeholder-bronze-400 focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all backdrop-blur-sm shadow-inner-3d"
                       placeholder="Create a password"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 top-1/2 transform -translate-y-1/2 text-olive-400/50 hover:text-olive-300/70 transition-colors"
+                      className="absolute right-4 top-1/2 transform -translate-y-1/2 text-bronze-400 hover:text-bronze-600 transition-colors"
                     >
                       {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
                   </div>
                   {errors.password && (
-                    <p className="mt-2 text-sm text-red-400">{errors.password.message}</p>
+                    <p className="mt-2 text-sm text-red-600">{errors.password.message}</p>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-olive-200/90 mb-2">
+                  <label className="block text-sm font-medium text-bronze-700 mb-2">
                     Confirm Password
                   </label>
                   <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-olive-400/50" />
+                    <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-bronze-400" />
                     <input
                       {...register('confirmPassword', {
                         required: 'Please confirm your password',
                         validate: value => value === password || 'Passwords do not match'
                       })}
                       type={showConfirmPassword ? 'text' : 'password'}
-                      className="w-full pl-12 pr-14 py-4 bg-dark-800/30 border border-olive-500/20 rounded-xl text-white placeholder-olive-300/50 focus:ring-2 focus:ring-olive-500 focus:border-transparent transition-all backdrop-blur-sm"
+                      className="w-full pl-12 pr-14 py-4 bg-cream-50 border border-beige-200 rounded-xl text-bronze-800 placeholder-bronze-400 focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all backdrop-blur-sm shadow-inner-3d"
                       placeholder="Confirm your password"
                     />
                     <button
                       type="button"
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-4 top-1/2 transform -translate-y-1/2 text-olive-400/50 hover:text-olive-300/70 transition-colors"
+                      className="absolute right-4 top-1/2 transform -translate-y-1/2 text-bronze-400 hover:text-bronze-600 transition-colors"
                     >
                       {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
                   </div>
                   {errors.confirmPassword && (
-                    <p className="mt-2 text-sm text-red-400">{errors.confirmPassword.message}</p>
+                    <p className="mt-2 text-sm text-red-600">{errors.confirmPassword.message}</p>
                   )}
                 </div>
 
                 <div className="flex items-start">
                   <input
                     type="checkbox"
-                    className="w-4 h-4 text-olive-600 bg-dark-800/30 border-olive-500/20 rounded focus:ring-olive-500 mt-1"
+                    className="w-4 h-4 text-amber-600 bg-cream-50 border-beige-200 rounded focus:ring-amber-500 mt-1"
                     required
                   />
-                  <label className="ml-2 text-sm text-olive-200/70">
+                  <label className="ml-2 text-sm text-bronze-600">
                     I agree to the
-                    <Link to="/terms" className="text-olive-400 hover:text-olive-300 transition-colors">
-                      Terms of Service
-                    </Link>{' '}
+                    <Link to="/terms" className="text-amber-600 hover:text-amber-500 transition-colors font-medium">
+                      {' '}Terms of Service{' '}
+                    </Link>
                     and
-                    <Link to="/privacy" className="text-olive-400 hover:text-olive-300 transition-colors">
-                      Privacy Policy
+                    <Link to="/privacy" className="text-amber-600 hover:text-amber-500 transition-colors font-medium">
+                      {' '}Privacy Policy
                     </Link>
                   </label>
                 </div>
@@ -366,12 +404,19 @@ const Register: React.FC = () => {
                   whileTap={{ scale: 0.98 }}
                   type="submit"
                   disabled={isLoading}
-                  className="w-full bg-gradient-to-r from-olive-600 to-olive-700 text-white py-4 rounded-xl font-bold text-lg hover:shadow-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full bg-gradient-to-r from-amber-500 to-bronze-600 text-white py-4 rounded-xl font-bold text-lg hover:shadow-3d-hover transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-3d"
                   style={{
-                    boxShadow: '0 10px 25px rgba(138, 156, 112, 0.3)'
+                    boxShadow: '0 10px 25px rgba(218, 143, 74, 0.3)'
                   }}
                 >
-                  {isLoading ? 'Creating Account...' : 'Create Account'}
+                  {isLoading ? (
+                    <div className="flex items-center justify-center space-x-2">
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Creating Account...</span>
+                    </div>
+                  ) : (
+                    'Create Account'
+                  )}
                 </motion.button>
               </motion.form>
             ) : showSuccessMessage ? (
@@ -387,17 +432,17 @@ const Register: React.FC = () => {
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-                  className="w-20 h-20 bg-gradient-to-r from-olive-500 to-olive-600 rounded-full flex items-center justify-center mx-auto"
+                  className="w-20 h-20 bg-gradient-to-r from-green-500 to-green-600 rounded-full flex items-center justify-center mx-auto shadow-3d"
                 >
                   <CheckCircle className="w-10 h-10 text-white" />
                 </motion.div>
                 
                 <div>
-                  <h3 className="text-2xl font-bold text-white mb-2">Account Created Successfully!</h3>
-                  <p className="text-olive-200/70 mb-4">
+                  <h3 className="text-2xl font-bold text-bronze-800 mb-2">Account Created Successfully!</h3>
+                  <p className="text-bronze-600 mb-4">
                     Your AutoTraderHub account has been created. You can now login with your credentials.
                   </p>
-                  <p className="text-olive-300 text-sm">
+                  <p className="text-amber-600 text-sm">
                     Redirecting to login page in 3 seconds...
                   </p>
                 </div>
@@ -406,7 +451,7 @@ const Register: React.FC = () => {
                   onClick={() => navigate('/login')}
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  className="bg-gradient-to-r from-olive-600 to-olive-700 text-white px-8 py-3 rounded-xl font-medium hover:shadow-lg transition-all"
+                  className="bg-gradient-to-r from-amber-500 to-bronze-600 text-white px-8 py-3 rounded-xl font-medium hover:shadow-3d transition-all shadow-3d"
                 >
                   Go to Login
                 </motion.button>
@@ -421,24 +466,24 @@ const Register: React.FC = () => {
                 className="space-y-6"
               >
                 <div className="text-center mb-6">
-                  <h3 className="text-2xl font-bold text-white">Verify Your Account</h3>
-                  <p className="text-olive-200/70 mt-2">
+                  <h3 className="text-2xl font-bold text-bronze-800">Verify Your Account</h3>
+                  <p className="text-bronze-600 mt-2">
                     We've sent a 6-digit verification code to
                   </p>
-                  <p className="text-olive-300 font-medium">{userIdentifier}</p>
+                  <p className="text-amber-600 font-medium">{userIdentifier}</p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-olive-200/90 mb-2">
+                  <label className="block text-sm font-medium text-bronze-700 mb-2">
                     Verification Code
                   </label>
                   <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-olive-400/50" />
+                    <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-bronze-400" />
                     <input
                       type="text"
                       value={otp}
                       onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      className="w-full pl-12 pr-4 py-4 bg-dark-800/30 border border-olive-500/20 rounded-xl text-white placeholder-olive-300/50 focus:ring-2 focus:ring-olive-500 focus:border-transparent transition-all backdrop-blur-sm text-center text-lg tracking-widest"
+                      className="w-full pl-12 pr-4 py-4 bg-cream-50 border border-beige-200 rounded-xl text-bronze-800 placeholder-bronze-400 focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all backdrop-blur-sm text-center text-lg tracking-widest shadow-inner-3d"
                       placeholder="000000"
                       maxLength={6}
                     />
@@ -450,12 +495,19 @@ const Register: React.FC = () => {
                   whileTap={{ scale: 0.98 }}
                   onClick={handleOtpSubmit}
                   disabled={isLoading || otp.length !== 6}
-                  className="w-full bg-gradient-to-r from-olive-600 to-olive-700 text-white py-4 rounded-xl font-bold text-lg hover:shadow-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full bg-gradient-to-r from-amber-500 to-bronze-600 text-white py-4 rounded-xl font-bold text-lg hover:shadow-3d-hover transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-3d"
                   style={{
-                    boxShadow: '0 10px 25px rgba(138, 156, 112, 0.3)'
+                    boxShadow: '0 10px 25px rgba(218, 143, 74, 0.3)'
                   }}
                 >
-                  {isLoading ? 'Verifying...' : 'Verify & Create Account'}
+                  {isLoading ? (
+                    <div className="flex items-center justify-center space-x-2">
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Verifying...</span>
+                    </div>
+                  ) : (
+                    'Verify & Create Account'
+                  )}
                 </motion.button>
 
                 <div className="text-center">
@@ -466,12 +518,12 @@ const Register: React.FC = () => {
                       disabled={isLoading}
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
-                      className="text-olive-400 hover:text-olive-300 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      className="text-amber-600 hover:text-amber-500 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                       {isLoading ? 'Sending...' : 'Resend OTP'}
                     </motion.button>
                   ) : (
-                    <p className="text-olive-200/70 text-sm">
+                    <p className="text-bronze-600 text-sm">
                       Resend OTP in {resendTimer} seconds
                     </p>
                   )}
@@ -486,7 +538,7 @@ const Register: React.FC = () => {
                   }}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  className="w-full bg-dark-800/50 text-olive-200 py-3 rounded-xl font-medium hover:bg-dark-700/50 transition-all border border-olive-500/20"
+                  className="w-full bg-beige-100 text-bronze-700 py-3 rounded-xl font-medium hover:bg-beige-200 transition-all border border-beige-200 shadow-inner-3d"
                 >
                   Back to Registration
                 </motion.button>
@@ -495,15 +547,23 @@ const Register: React.FC = () => {
           </AnimatePresence>
 
           <div className="mt-8 text-center">
-            <p className="text-olive-200/70">
+            <p className="text-bronze-600">
               Already have an account?{' '}
               <Link
                 to="/login"
-                className="text-olive-400 hover:text-olive-300 font-medium transition-colors"
+                className="text-amber-600 hover:text-amber-500 font-medium transition-colors"
               >
                 Sign in here
               </Link>
             </p>
+          </div>
+
+          {/* Security Badge */}
+          <div className="mt-6 pt-6 border-t border-beige-200">
+            <div className="flex items-center justify-center space-x-2 text-bronze-500">
+              <Shield className="w-4 h-4" />
+              <span className="text-xs">Your data is protected with enterprise-grade security</span>
+            </div>
           </div>
         </motion.div>
       </motion.div>
