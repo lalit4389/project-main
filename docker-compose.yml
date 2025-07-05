@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  autotrader-api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:///./autotrader.db
+      - JWT_SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - ENCRYPTION_KEY=your-32-character-encryption-key-here
+      - DEBUG=True
+    volumes:
+      - ./logs:/app/logs
+      - ./autotrader.db:/app/autotrader.db
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
